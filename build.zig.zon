@@ -1,0 +1,7 @@
+.{
+    .name = .bash_ls,
+    .version = "0.0.1",
+    .minimum_zig_version = "0.16.0",
+    .paths = .{""},
+    .fingerprint = 0x65a9761e3c187424,
+}

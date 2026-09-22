@@ -50,16 +50,16 @@ func Split(data []byte, _ bool) (advance int, token []byte, err error) {
 	}
 
 	lengthBytes := header[len(headerField):]
-	contentLength, err := strconv.Atoi(string(lengthBytes))
+	length, err := strconv.Atoi(string(lengthBytes))
 	if err != nil {
 		return 0, nil, err
 
 	}
 
-	if len(content) < contentLength {
+	if len(content) < length {
 		return 0, nil, nil
 	}
 
-	total := len(headerField) + len(lengthBytes) + len(fieldSeparator) + contentLength
-	return total, nil, nil
+	total := len(headerField) + len(lengthBytes) + len(fieldSeparator) + length
+	return total, data[:total], nil
 }

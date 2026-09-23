@@ -11,34 +11,36 @@ pub const Decimal = f32;
 
 pub const String = []const u8;
 
+pub const LSPAny = json.Value;
+
 pub const LSPObject = std.StringHashMap(LSPAny);
 
-pub const LSPArray = std.ArrayList(LSPAny);
+pub const LSPArray = []LSPAny;
 
-pub const LSPAny = union(enum) {
-    lsp_array: LSPArray,
-    lsp_object: LSPObject,
-    string: String,
-    initeger: Integer,
-    uninteger: UInteger,
-    decimal: Decimal,
-    boolean: bool,
-    null: null,
-};
+pub fn Request(T: type) type {
+    return struct {
+        jsonrpc: []const u8 = "2.0",
+        id: Integer = undefined,
+        method: String = undefined,
+        params: ?T = null,
+    };
+}
 
-pub const RequestMessage = struct {
-    jsonrpc: []const u8 = "2.0",
-    id: Integer = undefined,
-    method: String = undefined,
-    params: type = null,
-};
+pub fn Response(T: type) type {
+    if (@TypeOf(T) == ResponseError) {
+        return struct {
+            jsonrpc: []const u8 = "2.0",
+            id: ?Integer = null,
+            @"error": T = undefined,
+        };
+    }
 
-pub const ResponseMessage = struct {
-    jsonrpc: []const u8 = "2.0",
-    id: Integer = undefined,
-    result: LSPAny = null,
-    @"error": ResponseError = null,
-};
+    return struct {
+        jsonrpc: []const u8 = "2.0",
+        id: Integer = undefined,
+        result: T = undefined,
+    };
+}
 
 pub const Error = error{
     ParseError,
@@ -57,9 +59,9 @@ pub const Error = error{
 pub const ResponseError = struct {
     code: Integer = undefined,
     message: String = undefined,
-    data: LSPAny = null,
+    data: ?LSPAny = null,
 
-    pub fn init(err: Error, msg: String, data: ?LSPAny) ResponseError {
+    pub fn init(err: Error, msg: String, data: ?LSPAny) @This() {
         return .{
             .message = msg,
             .data = data,
@@ -80,11 +82,33 @@ pub const ResponseError = struct {
     }
 };
 
-pub const NotificationMessage = struct {
-    jsonrpc: []const u8 = "2.0",
-    method: String = undefined,
-    params: type = null,
+pub fn Notification(T: type) type {
+    return struct {
+        jsonrpc: []const u8 = "2.0",
+        method: String = undefined,
+        params: ?T = null,
+    };
+}
+
+pub const InitializeParams = struct {
+    processId: ?Integer = null,
+    clientInfo: ?ClientInfo = null,
+    rootPath: ?String = null,
+    rootUri: ?String = null,
+    initializeOptions: ?LSPAny = null,
+    // capabilities: ClientCapabilities = undefined,
 };
+
+pub const ClientInfo = struct {
+    name: String,
+    version: ?String,
+};
+
+pub const ClientCapabilities = struct {
+    // textDocument:
+};
+
+pub const InitializeRequest = Request(InitializeParams);
 
 const field_separator = [_]u8{ '\r', '\n', '\r', '\n' };
 const header_field_name = "Content-Length: ";
@@ -99,7 +123,10 @@ pub fn encode(allocator: Allocator, json_struct: anytype) ![]u8 {
 pub fn decode(comptime T: type, reader: *std.Io.Reader, allocator: Allocator) !json.Parsed(T) {
     const content = try getContent(reader, allocator);
     defer allocator.free(content);
-    return try json.parseFromSlice(T, allocator, content, .{ .ignore_unknown_fields = true });
+    return try json.parseFromSlice(T, allocator, content, .{
+        .ignore_unknown_fields = true,
+        .allocate = .alloc_always,
+    });
 }
 
 pub fn getContent(reader: *std.Io.Reader, allocator: Allocator) ![]u8 {

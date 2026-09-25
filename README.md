@@ -1,1 +1,1 @@
-Bash Language Server
+# Bash Language Server

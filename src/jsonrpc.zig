@@ -17,30 +17,30 @@ pub const LSPObject = std.StringHashMap(LSPAny);
 
 pub const LSPArray = []LSPAny;
 
-pub fn Request(T: type) type {
-    return struct {
-        jsonrpc: []const u8 = "2.0",
-        id: Integer = undefined,
-        method: String = undefined,
-        params: ?T = null,
-    };
-}
+pub const Request = struct {
+    jsonrpc: []const u8 = "2.0",
+    id: Integer = undefined,
+    method: String = undefined,
+    params: ?LSPAny = null,
+};
 
-const ResponseKind = enum { err, result };
-
-pub fn Response(T: type, _: ResponseKind) type {
-    if (@hasField(T, "code")) {
-        return struct {
-            jsonrpc: []const u8 = "2.0",
-            id: ?Integer = null,
-            @"error": T = undefined,
-        };
-    }
-
+pub fn ResponseResult(comptime T: type) type {
     return struct {
         jsonrpc: []const u8 = "2.0",
         id: Integer = undefined,
         result: T = undefined,
+    };
+}
+
+pub fn ResponseError(comptime err_code: ErrorCode, comptime T: type) type {
+    return struct {
+        jsonrpc: []const u8 = "2.0",
+        id: ?Integer = null,
+        @"error": struct {
+            code: Integer = @intFromEnum(err_code),
+            message: String = undefined,
+            data: ?T = null,
+        },
     };
 }
 
@@ -59,14 +59,6 @@ pub const ErrorCode = enum(Integer) {
 
     initialize_error = 1,
 };
-
-pub fn ResponseError(err_code: ErrorCode, T: anytype) type {
-    return struct {
-        code: Integer = @intFromEnum(err_code),
-        message: String = undefined,
-        data: T,
-    };
-}
 
 pub fn Notification(T: type) type {
     return struct {
@@ -93,17 +85,13 @@ pub const InitializeResult = struct {
     serverInfo: ?ServerInfo = null,
 };
 
-pub const InitializeResultResponse = Response(InitializeResult, .result);
+pub const InitializeResultResponse = ResponseResult(InitializeResult);
 
 pub const InitializeErrorData = struct { retry: bool = false };
 
-pub const InitializeError = ResponseError(.initialize_error, InitializeErrorData);
+pub const InitializeErrorResponse = ResponseError(.initialize_error, InitializeErrorData);
 
-pub const InitializeErrorResponse = Response(InitializeError, .err);
-
-pub const ServerNotInitialized = ResponseError(.server_not_initialized, InitializeErrorData);
-
-pub const NotInitializedResponse = Response(ServerNotInitialized, .err);
+pub const ServerNotInitializedResponse = ResponseError(.server_not_initialized, InitializeErrorData);
 
 pub const ServerClientInfo = struct {
     name: String = undefined,
@@ -124,8 +112,6 @@ pub const ClientCapabilities = struct {
 
 // NOTE: for lsp config i guess
 pub const InitializationOptions = LSPAny;
-
-pub const InitializeRequest = Request(InitializeParams);
 
 pub const TextDocumentClientCapabilities = struct {
     hover: ?HoverClientCapabilities = null,
@@ -295,20 +281,23 @@ pub fn decode(comptime T: type, reader: *std.Io.Reader, allocator: Allocator) !j
     });
 }
 
-pub fn getContent(reader: *std.Io.Reader, allocator: Allocator) ![]u8 {
-    var alloc_writer = std.Io.Writer.Allocating.init(allocator);
-    defer alloc_writer.deinit();
+pub fn decodeFromValue(comptime T: type, allocator: Allocator, val: json.Value) !json.Parsed(T) {
+    return try json.parseFromValue(T, allocator, val, .{
+        .ignore_unknown_fields = true,
+        .allocate = .alloc_always,
+    });
+}
 
-    _ = try reader.streamDelimiter(&alloc_writer.writer, '\n');
-    const line = alloc_writer.written();
+pub fn getContent(reader: *std.Io.Reader, allocator: Allocator) ![]u8 {
+    const line = try reader.takeDelimiter('\n') orelse return error.NewLineNotFound;
     if (!std.mem.endsWith(u8, line, "\r")) return error.SeparatorNotFound;
-    const separator_rest = try reader.takeArray(3);
-    if (!std.mem.eql(u8, separator_rest, "\n\r\n")) return error.SeparatorNotFound;
+    const separator_rest = try reader.takeArray(2);
+    if (!std.mem.eql(u8, separator_rest, "\r\n")) return error.SeparatorNotFound;
 
     if (std.mem.cut(u8, line[0..(line.len - 1)], header_field_name)) |parts| {
         const content_length = try std.fmt.parseInt(usize, parts.@"1", 10);
         const content = try reader.readAlloc(allocator, content_length);
-        std.log.debug("re: {s}\n", .{content});
+        std.log.debug("content: {s}\n", .{content});
         return content;
     }
 

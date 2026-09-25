@@ -66,13 +66,78 @@ pub fn main(init: std.process.Init) !void {
         log_file = null;
     };
 
-    var buffer: [1024 * 4]u8 = undefined;
-    var stdin_reader = std.Io.File.stdin().reader(io, &buffer);
+    var lsp_initialized = false;
+    var stdin_buffer: [1024 * 4]u8 = undefined;
+    var stdin_reader = std.Io.File.stdin().reader(io, &stdin_buffer);
     const reader = &stdin_reader.interface;
+
+    var stdout_buffer: [1024 * 4]u8 = undefined;
+    var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
+    const writer = &stdout_writer.interface;
+
     while (true) {
-        const content = try jsonrpc.getContent(reader, allocator);
-        defer allocator.free(content);
-        std.log.debug("length: {d}\n content: {s}", .{ content.len, content });
+        if (!lsp_initialized) {
+            const parsed = jsonrpc.decode(jsonrpc.InitializeRequest, reader, allocator) catch |err| {
+                std.log.debug("error: {any}", .{err});
+                const res: jsonrpc.InitializeErrorResponse = .{
+                    .@"error" = .{
+                        .message = "failed to decode the message",
+                        .data = .{
+                            .retry = true,
+                        },
+                    },
+                };
+                const serialized = try jsonrpc.encode(allocator, res);
+                defer allocator.free(serialized);
+                try writer.writeAll(serialized);
+                try writer.flush();
+                continue;
+            };
+
+            defer parsed.deinit();
+
+            if (std.mem.eql(u8, parsed.value.method, "initialize")) {
+                std.log.debug("initialize request received", .{});
+                const res: jsonrpc.InitializeResultResponse = .{
+                    .id = parsed.value.id,
+                    .result = .{
+                        .serverInfo = .{
+                            .name = "bash_ls",
+                            .version = "v0.0.1",
+                        },
+                        .capabilities = .{
+                            .hoverProvider = true,
+                        },
+                    },
+                };
+
+                const serialized = try jsonrpc.encode(allocator, res);
+                defer allocator.free(serialized);
+                try writer.writeAll(serialized);
+                try writer.flush();
+                continue;
+            }
+
+            if (std.mem.eql(u8, parsed.value.method, "initialized")) {
+                lsp_initialized = true;
+                std.log.debug("server initialized", .{});
+                continue;
+            }
+
+            std.log.debug("server is not initialized. request method: {s}", .{parsed.value.method});
+            const res: jsonrpc.NotInitializedResponse = .{
+                .@"error" = .{
+                    .message = "server is not initialized",
+                    .data = .{
+                        .retry = true,
+                    },
+                },
+            };
+            const serialized = try jsonrpc.encode(allocator, res);
+            defer allocator.free(serialized);
+            try writer.writeAll(serialized);
+            try writer.flush();
+        }
     }
 }
 

@@ -75,10 +75,15 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
     const writer = &stdout_writer.interface;
 
+    // HACK: use client shutdown / exit notifications instead
+    var fail_count: u8 = 0;
+
     while (true) {
         const parsed_req = jsonrpc.decode(jsonrpc.Request, reader, allocator) catch |err| {
             std.log.debug("request error: {any}", .{err});
-            continue;
+            if (fail_count < 5) continue;
+            fail_count += 1;
+            return err;
         };
 
         defer parsed_req.deinit();

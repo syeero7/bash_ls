@@ -32,14 +32,25 @@ pub fn ResponseResult(comptime T: type) type {
     };
 }
 
-pub fn ResponseError(comptime err_code: ErrorCode, comptime T: type) type {
+pub fn ResponseError(comptime err_code: ErrorCode, comptime T: ?type) type {
+    if (T) |D| {
+        return struct {
+            jsonrpc: []const u8 = "2.0",
+            id: ?Integer = null,
+            @"error": struct {
+                code: Integer = @intFromEnum(err_code),
+                message: String = undefined,
+                data: D = undefined,
+            },
+        };
+    }
+
     return struct {
         jsonrpc: []const u8 = "2.0",
         id: ?Integer = null,
         @"error": struct {
             code: Integer = @intFromEnum(err_code),
             message: String = undefined,
-            data: ?T = null,
         },
     };
 }
@@ -92,6 +103,8 @@ pub const InitializeErrorData = struct { retry: bool = false };
 pub const InitializeErrorResponse = ResponseError(.initialize_error, InitializeErrorData);
 
 pub const ServerNotInitializedResponse = ResponseError(.server_not_initialized, InitializeErrorData);
+
+pub const InvalidRequestResponse = ResponseError(.invalid_request, null);
 
 pub const ServerClientInfo = struct {
     name: String = undefined,

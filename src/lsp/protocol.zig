@@ -60,6 +60,10 @@ const ErrorCode = enum(Integer) {
 
     /// server can't handle the protocol version provided by the client
     initialize_error = 1,
+
+    pub fn jsonStringify(self: @This(), stream: anytype) !void {
+        try stream.write(@intFromEnum(self));
+    }
 };
 
 const ResponseError = struct {

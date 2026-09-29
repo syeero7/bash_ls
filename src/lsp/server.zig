@@ -1,8 +1,8 @@
 const std = @import("std");
+const protocol = @import("protocol.zig");
+
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
-
-const protocol = @import("protocol.zig");
 
 const Method = enum {
     initialize,
@@ -54,7 +54,7 @@ pub fn start(io: Io, allocator: Allocator, reader: *Io.Reader, writer: *Io.Write
                 .id = message_id,
                 .@"error" = .{
                     .code = .invalid_request,
-                    .message = "invalid_request",
+                    .message = "invalid request",
                 },
             });
             continue;

@@ -1,5 +1,5 @@
 const std = @import("std");
-const jsonrpc = @import("jsonrpc.zig");
+const server = @import("lsp/server.zig");
 
 pub const std_options: std.Options = .{
     .log_level = .debug,
@@ -74,121 +74,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
     const writer = &stdout_writer.interface;
 
-    // HACK: use client shutdown / exit notifications instead
-    var fail_count: u8 = 0;
-    var lsp_initialized = false;
-    var shutdown_received = false;
-
-    while (true) {
-        const parsed_req = jsonrpc.decode(jsonrpc.Request, reader, allocator) catch |err| {
-            std.log.debug("request error: {any}", .{err});
-            fail_count += 1;
-            if (fail_count < 5) continue;
-            return err;
-        };
-
-        if (fail_count != 0) fail_count = 0;
-
-        defer parsed_req.deinit();
-        const req_method = parsed_req.value.method;
-        std.log.debug("request received. method: {s}", .{req_method});
-
-        defer writer.flush() catch {};
-
-        if (!lsp_initialized) {
-            // TODO: use enum switch. std.meta.stringToEnum
-            if (std.mem.eql(u8, req_method, "initialize")) {
-                const parsed = jsonrpc.decodeFromValue(jsonrpc.InitializeParams, allocator, parsed_req.value.params.?) catch |err| {
-                    std.log.debug("error: {any}", .{err});
-                    // FIXME: only send this error response if protocol version provided by the client can't be handled by the server
-                    // NOTE: use parse error or internal error code
-                    const res: jsonrpc.InitializeErrorResponse = .{
-                        .@"error" = .{
-                            .message = "failed to decode the message",
-                            .data = .{
-                                .retry = true,
-                            },
-                        },
-                    };
-                    const serialized = try jsonrpc.encode(allocator, res);
-                    defer allocator.free(serialized);
-                    try writer.writeAll(serialized);
-                    continue;
-                };
-
-                defer parsed.deinit();
-                const res: jsonrpc.InitializeResultResponse = .{
-                    .id = parsed_req.value.id,
-                    .result = .{
-                        .serverInfo = .{
-                            .name = "bash_ls",
-                            .version = "v0.0.1",
-                        },
-                        .capabilities = .{
-                            .hoverProvider = true,
-                        },
-                    },
-                };
-
-                const serialized = try jsonrpc.encode(allocator, res);
-                defer allocator.free(serialized);
-                try writer.writeAll(serialized);
-                continue;
-            }
-
-            if (std.mem.eql(u8, req_method, "initialized")) {
-                lsp_initialized = true;
-                std.log.debug("server initialized", .{});
-                continue;
-            }
-
-            std.log.debug("server is not initialized. method: {s}", .{req_method});
-            const res: jsonrpc.ServerNotInitializedResponse = .{
-                .@"error" = .{
-                    .message = "server is not initialized",
-                    .data = .{
-                        .retry = true,
-                    },
-                },
-            };
-            const serialized = try jsonrpc.encode(allocator, res);
-            defer allocator.free(serialized);
-            try writer.writeAll(serialized);
-        }
-
-        if (std.mem.eql(u8, req_method, "shutdown")) {
-            shutdown_received = true;
-            std.log.debug("shutdown request received", .{});
-            const res: jsonrpc.ResponseResult(struct {}) = .{
-                .id = parsed_req.value.id,
-                .result = .{},
-            };
-
-            const serialized = try jsonrpc.encode(allocator, res);
-            std.log.debug("shutdown response: {s}", .{serialized});
-            defer allocator.free(serialized);
-            try writer.writeAll(serialized);
-            continue;
-        }
-
-        if (std.mem.eql(u8, req_method, "exit")) {
-            std.log.debug("exit notification received", .{});
-            if (shutdown_received) return;
-            return error.ExitWithoutShutdown;
-        }
-
-        if (shutdown_received) {
-            std.log.debug("invalid request received. method: {s}", .{req_method});
-            const res: jsonrpc.InvalidRequestResponse = .{
-                .@"error" = .{
-                    .message = "invalid request",
-                },
-            };
-            const serialized = try jsonrpc.encode(allocator, res);
-            defer allocator.free(serialized);
-            try writer.writeAll(serialized);
-        }
-    }
+    try server.start(io, allocator, reader, writer);
 }
 
 test {

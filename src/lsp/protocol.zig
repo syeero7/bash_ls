@@ -118,10 +118,22 @@ pub const ServerInfo = ServerClientInfo;
 
 pub const ClientCapabilities = struct {
     textDocument: ?TextDocumentClientCapabilities = null,
+    general: ?GeneralClientCapabilities = null,
 
     // workspace: ?WorkspaceClientCapabilities = null,
     // window: ?WindowClientCapabilities = null,
-    // general: ?GeneralClientCapabilities = null,
+
+    pub fn supportUtf8Encoding(self: @This()) bool {
+        if (self.general) |general| {
+            if (general.positionEncodings) |encodings| {
+                for (encodings) |value| {
+                    if (value == .@"utf-8") return true;
+                }
+            }
+        }
+
+        return false;
+    }
 };
 
 // NOTE: for lsp config i guess
@@ -204,7 +216,13 @@ pub const GeneralClientCapabilities = struct {
     // staleRequestSupport: ?StaleRequestSupportOptions = null,
     // regularExpressions: ?RegularExpressionsClientCapabilities = null,
     // markdown: ?MarkdownClientCapabilities = null,
-    // positionEncodings: ?[]PositionEncodingKind = null,
+    positionEncodings: ?[]PositionEncodingKind = null,
+};
+
+pub const PositionEncodingKind = enum {
+    @"utf-8",
+    @"utf-16",
+    @"utf-32",
 };
 
 pub const StaleRequestSupportOptions = struct {
@@ -213,10 +231,11 @@ pub const StaleRequestSupportOptions = struct {
 };
 
 pub const ServerCapabilities = struct {
-    // positionEncoding: ?PositionEncodingKind = null,
-    // textDocumentSync?: TextDocumentSyncOptions | TextDocumentSyncKind;
+    positionEncoding: ?PositionEncodingKind = null,
+    textDocumentSync: ?TextDocumentSyncOptions = null,
+
     // completionProvider?: CompletionOptions;
-    hoverProvider: ?bool, // HoverOptions;
+    hoverProvider: ?bool = null, // HoverOptions;
     // signatureHelpProvider?: SignatureHelpOptions;
     // declarationProvider?: boolean | DeclarationOptions
     // definitionProvider?: boolean | DefinitionOptions;
@@ -272,6 +291,65 @@ pub const FileOperationOptions = struct {
     // willRename?: FileOperationRegistrationOptions;
     // didDelete?: FileOperationRegistrationOptions;
     // willDelete?: FileOperationRegistrationOptions;
+};
+
+pub const TextDocumentSyncOptions = struct {
+    openClose: ?bool,
+    change: ?TextDocumentSyncKind,
+};
+
+pub const TextDocumentSyncKind = enum(u8) {
+    none = 0,
+    full = 1,
+    incremental = 2,
+
+    pub fn jsonStringify(self: @This(), stream: anytype) !void {
+        try stream.write(@intFromEnum(self));
+    }
+};
+
+pub const DidOpenTextDocumentParams = struct {
+    textDocument: TextDocumentItem,
+};
+
+pub const TextDocumentItem = struct {
+    uri: String,
+    languageId: String,
+    version: Integer,
+    text: String,
+};
+
+pub const Range = struct {
+    start: Position,
+    end: Position,
+};
+pub const Position = struct {
+    line: UInteger,
+    character: UInteger,
+};
+
+pub const DidChangeTextDocumentParams = struct {
+    textDocument: VersionedTextDocumentIdentifier,
+    contentChanges: []TextDocumentContentChangeEvent,
+};
+
+pub const VersionedTextDocumentIdentifier = struct {
+    uri: String,
+    version: Integer,
+};
+
+pub const TextDocumentContentChangeEvent = struct {
+    /// range is null if client sent the whole document
+    range: ?Range = null,
+    text: String,
+};
+
+pub const DidCloseTextDocumentParams = struct {
+    textDocument: TextDocumentIdentifier,
+};
+
+pub const TextDocumentIdentifier = struct {
+    uri: String,
 };
 
 pub fn parseMessage(reader: *Io.Reader, allocator: Allocator) !json.Parsed(Message) {

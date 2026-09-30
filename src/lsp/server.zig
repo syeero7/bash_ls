@@ -1,5 +1,6 @@
 const std = @import("std");
 const protocol = @import("protocol.zig");
+const sync = @import("document_sync.zig");
 
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
@@ -9,6 +10,10 @@ const Method = enum {
     initialized,
     shutdown,
     exit,
+
+    @"textDocument/didOpen",
+    @"textDocument/didChange",
+    @"textDocument/didClose",
 
     unknown_method,
 
@@ -26,6 +31,9 @@ const State = enum {
 pub fn start(io: Io, allocator: Allocator, reader: *Io.Reader, writer: *Io.Writer) !void {
     _ = io;
     var server_state: State = .not_initialized;
+    var position_encoding: protocol.PositionEncodingKind = .@"utf-16";
+    var document_sync = sync.DocumentSync.init(allocator);
+    defer document_sync.deinit();
 
     while (true) {
         const parsed_message = protocol.parseMessage(reader, allocator) catch |err| {
@@ -67,7 +75,7 @@ pub fn start(io: Io, allocator: Allocator, reader: *Io.Reader, writer: *Io.Write
         switch (message_method) {
             .initialize => {
                 const parsed_params = protocol.parseParams(allocator, protocol.InitializeParams, message_params.?) catch |err| {
-                    std.log.debug("param parsing failed. err: {any}", .{err});
+                    std.log.debug("{s} param parsing failed. err: {any}", .{ parsed_message.value.method, err });
                     try protocol.sendParseErrorResponse(writer, allocator, message_id);
                     continue;
                 };
@@ -75,18 +83,25 @@ pub fn start(io: Io, allocator: Allocator, reader: *Io.Reader, writer: *Io.Write
                 defer parsed_params.deinit();
                 // TODO: use initialize params
 
-                try protocol.sendResultResponse(writer, allocator, protocol.InitializeResult, .{
-                    .id = message_id.?,
-                    .result = .{
-                        .serverInfo = .{
-                            .name = "bash_ls",
-                            .version = "v0.0.1",
+                if (parsed_params.value.capabilities.supportUtf8Encoding()) {
+                    std.log.debug("support utf-8 encoding.", .{});
+                    position_encoding = .@"utf-8";
+                }
+
+                document_sync.setPositionEncoding(position_encoding);
+
+                const result = protocol.InitializeResult{
+                    .capabilities = .{
+                        .positionEncoding = position_encoding,
+                        .textDocumentSync = .{
+                            .openClose = true,
+                            .change = .incremental,
                         },
-                        .capabilities = .{
-                            .hoverProvider = true,
-                        },
+                        .hoverProvider = true,
                     },
-                });
+                };
+
+                try protocol.sendResultResponse(writer, allocator, protocol.InitializeResult, .{ .id = message_id.?, .result = result });
                 continue;
             },
             .initialized => {
@@ -108,6 +123,19 @@ pub fn start(io: Io, allocator: Allocator, reader: *Io.Reader, writer: *Io.Write
                 if (server_state == .shutdown) return;
                 return error.ExitWithoutShutdown;
             },
+            .@"textDocument/didOpen" => {
+                const parsed_params = protocol.parseParams(allocator, protocol.DidOpenTextDocumentParams, message_params.?) catch |err| {
+                    std.log.debug("{s} param parsing failed. err: {any}", .{ parsed_message.value.method, err });
+                    try protocol.sendParseErrorResponse(writer, allocator, message_id);
+                    continue;
+                };
+
+                defer parsed_params.deinit();
+                try document_sync.didOpen(allocator, parsed_params.value);
+            },
+            .@"textDocument/didChange" => {},
+            .@"textDocument/didClose" => {},
+
             else => {
                 std.log.debug("not implemented. method: {s}", .{parsed_message.value.method});
                 continue;

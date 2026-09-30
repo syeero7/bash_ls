@@ -11,6 +11,10 @@ const Method = enum {
     exit,
 
     unknown_method,
+
+    pub fn fromString(str: []const u8) @This() {
+        return std.meta.stringToEnum(@This(), str) orelse .unknown_method;
+    }
 };
 
 const State = enum {
@@ -35,7 +39,7 @@ pub fn start(io: Io, allocator: Allocator, reader: *Io.Reader, writer: *Io.Write
         defer parsed_message.deinit();
         const message_id = parsed_message.value.id;
         const message_params = parsed_message.value.params;
-        const message_method = std.meta.stringToEnum(Method, parsed_message.value.method) orelse Method.unknown_method;
+        const message_method = Method.fromString(parsed_message.value.method);
 
         if (server_state == .not_initialized and message_method != .initialize and message_method != .initialized) {
             try protocol.sendErrorResponse(writer, allocator, .{
@@ -64,7 +68,7 @@ pub fn start(io: Io, allocator: Allocator, reader: *Io.Reader, writer: *Io.Write
             .initialize => {
                 const parsed_params = protocol.parseParams(allocator, protocol.InitializeParams, message_params.?) catch |err| {
                     std.log.debug("param parsing failed. err: {any}", .{err});
-                    try protocol.sendParseErrorResponse(writer, allocator, null);
+                    try protocol.sendParseErrorResponse(writer, allocator, message_id);
                     continue;
                 };
 

@@ -33,7 +33,7 @@ pub fn start(io: Io, allocator: Allocator, reader: *Io.Reader, writer: *Io.Write
     var server_state: State = .not_initialized;
     var position_encoding: protocol.PositionEncodingKind = .@"utf-16";
     var document_sync = sync.DocumentSync.init(allocator);
-    defer document_sync.deinit();
+    defer document_sync.deinit(allocator);
 
     while (true) {
         const parsed_message = protocol.parseMessage(reader, allocator) catch |err| {

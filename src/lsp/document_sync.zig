@@ -16,7 +16,13 @@ pub const DocumentSync = struct {
         self.encoding = encoding;
     }
 
-    pub fn deinit(self: *@This()) void {
+    pub fn deinit(self: *@This(), allocator: Allocator) void {
+        var doc_iterator = self.documents.iterator();
+        while (doc_iterator.next()) |entry| {
+            allocator.free(entry.key_ptr.*);
+            allocator.free(entry.value_ptr.*);
+        }
+
         self.documents.deinit();
         self.* = undefined;
     }

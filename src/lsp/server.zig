@@ -99,6 +99,10 @@ pub fn start(io: Io, allocator: Allocator, reader: *Io.Reader, writer: *Io.Write
                         },
                         .hoverProvider = true,
                     },
+                    .serverInfo = .{
+                        .name = "bash_ls",
+                        .version = "v0.0.1",
+                    },
                 };
 
                 try protocol.sendResultResponse(writer, allocator, protocol.InitializeResult, .{ .id = message_id.?, .result = result });

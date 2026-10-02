@@ -6,7 +6,7 @@ const Map = std.StringHashMap([]u8);
 const Position = protocol.Position;
 const Encoding = protocol.PositionEncodingKind;
 
-pub const DocumentSync = struct {
+pub const TextDocumentSync = struct {
     documents: Map = undefined,
     encoding: Encoding = .@"utf-16",
 

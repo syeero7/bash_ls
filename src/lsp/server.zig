@@ -1,6 +1,6 @@
 const std = @import("std");
 const protocol = @import("protocol.zig");
-const sync = @import("document_sync.zig");
+const sync = @import("text_document_sync.zig");
 
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
@@ -32,8 +32,8 @@ pub fn start(io: Io, allocator: Allocator, reader: *Io.Reader, writer: *Io.Write
     _ = io;
     var server_state: State = .not_initialized;
     var position_encoding: protocol.PositionEncodingKind = .@"utf-16";
-    var document_sync = sync.DocumentSync.init(allocator);
-    defer document_sync.deinit(allocator);
+    var text_document = sync.TextDocumentSync.init(allocator);
+    defer text_document.deinit(allocator);
 
     while (true) {
         const parsed_message = protocol.parseMessage(reader, allocator) catch |err| {
@@ -88,7 +88,7 @@ pub fn start(io: Io, allocator: Allocator, reader: *Io.Reader, writer: *Io.Write
 
                 // FIXME: support utf-16 position encoding
                 std.debug.assert(position_encoding == .@"utf-8");
-                document_sync.setPositionEncoding(position_encoding);
+                text_document.setPositionEncoding(position_encoding);
 
                 const result = protocol.InitializeResult{
                     .capabilities = .{
@@ -135,7 +135,7 @@ pub fn start(io: Io, allocator: Allocator, reader: *Io.Reader, writer: *Io.Write
                 };
 
                 defer parsed_params.deinit();
-                try document_sync.didOpen(allocator, parsed_params.value);
+                try text_document.didOpen(allocator, parsed_params.value);
             },
             .@"textDocument/didChange" => {
                 const parsed_params = protocol.parseParams(allocator, protocol.DidChangeTextDocumentParams, message_params.?) catch |err| {
@@ -145,7 +145,7 @@ pub fn start(io: Io, allocator: Allocator, reader: *Io.Reader, writer: *Io.Write
                 };
 
                 defer parsed_params.deinit();
-                try document_sync.didChange(allocator, parsed_params.value);
+                try text_document.didChange(allocator, parsed_params.value);
             },
             .@"textDocument/didClose" => {},
 

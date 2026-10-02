@@ -147,7 +147,16 @@ pub fn start(io: Io, allocator: Allocator, reader: *Io.Reader, writer: *Io.Write
                 defer parsed_params.deinit();
                 try text_document.didChange(allocator, parsed_params.value);
             },
-            .@"textDocument/didClose" => {},
+            .@"textDocument/didClose" => {
+                const parsed_params = protocol.parseParams(allocator, protocol.DidCloseTextDocumentParams, message_params.?) catch |err| {
+                    std.log.debug("{s} param parsing failed. err: {any}", .{ message_method_string, err });
+                    try protocol.sendParseErrorResponse(writer, allocator, message_id);
+                    continue;
+                };
+
+                defer parsed_params.deinit();
+                try text_document.didClose(allocator, parsed_params.value);
+            },
 
             else => {
                 std.log.debug("not implemented. method: {s}", .{message_method_string});

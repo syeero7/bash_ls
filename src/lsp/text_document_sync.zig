@@ -72,7 +72,11 @@ pub const TextDocumentSync = struct {
         current_text.* = new_text;
     }
 
-    // pub fn didClose(self: *@This(), allocator: Allocator, params: protocol.DidCloseTextDocumentParams) !void {}
+    pub fn didClose(self: *@This(), allocator: Allocator, params: protocol.DidCloseTextDocumentParams) !void {
+        const entry = self.documents.fetchRemove(params.textDocument.uri) orelse return;
+        allocator.free(entry.key);
+        allocator.free(entry.value);
+    }
 };
 
 fn positionToIndex(text: []const u8, position: Position, encoding: Encoding) usize {

@@ -1,6 +1,16 @@
 .{
     .name = .bash_ls,
     .version = "0.0.1",
+    .dependencies = .{
+        .tree_sitter = .{
+            .url = "git+https://github.com/tree-sitter/zig-tree-sitter.git#b562510b5563dcf3b7fcac4a5fe9d60834c84667",
+            .hash = "tree_sitter-0.26.0-8heIf-vDAQDh0HhAAUVwVZFmLrwSKMZl5gRaVFqtas0W",
+        },
+        .tree_sitter_bash = .{
+            .url = "git+https://github.com/tree-sitter/tree-sitter-bash.git#a06c2e4415e9bc0346c6b86d401879ffb44058f7",
+            .hash = "N-V-__8AANjenwCy_cXlIbU8nqBzGxMlEHVokLZJYrmIXtoz",
+        },
+    },
     .minimum_zig_version = "0.16.0",
     .fingerprint = 0x65a9761e3c187424,
     .paths = .{

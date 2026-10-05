@@ -1,9 +1,13 @@
 const std = @import("std");
+const ts = @import("tree_sitter");
 const protocol = @import("protocol.zig");
 const sync = @import("text_document_sync.zig");
+const hover = @import("../features/hover.zig");
 
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
+
+extern fn tree_sitter_bash() callconv(.c) *ts.Language;
 
 const Method = enum {
     initialize,
@@ -14,6 +18,8 @@ const Method = enum {
     @"textDocument/didOpen",
     @"textDocument/didChange",
     @"textDocument/didClose",
+
+    @"textDocument/hover",
 
     unknown_method,
 
@@ -30,8 +36,16 @@ const State = enum {
 
 pub fn start(io: Io, allocator: Allocator, reader: *Io.Reader, writer: *Io.Writer) !void {
     _ = io;
+    const lang = tree_sitter_bash();
+    defer lang.destroy();
+
+    const parser = ts.Parser.create();
+    defer parser.destroy();
+    try parser.setLanguage(lang);
+
     var server_state: State = .not_initialized;
     var position_encoding: protocol.PositionEncodingKind = .@"utf-16";
+
     var text_document = sync.TextDocumentSync.init(allocator);
     defer text_document.deinit(allocator);
 
@@ -156,6 +170,22 @@ pub fn start(io: Io, allocator: Allocator, reader: *Io.Reader, writer: *Io.Write
 
                 defer parsed_params.deinit();
                 try text_document.didClose(allocator, parsed_params.value);
+            },
+            .@"textDocument/hover" => {
+                const parsed_params = protocol.parseParams(allocator, protocol.HoverParams, message_params.?) catch |err| {
+                    std.log.debug("{s} param parsing failed. err: {any}", .{ message_method_string, err });
+                    try protocol.sendParseErrorResponse(writer, allocator, message_id);
+                    continue;
+                };
+
+                defer parsed_params.deinit();
+
+                const text = text_document.documents.get(parsed_params.value.textDocument.uri) orelse continue;
+                const result = try hover.hover(allocator, parser, text, parsed_params.value.position) orelse continue;
+                try protocol.sendResultResponse(writer, allocator, protocol.HoverResult, .{
+                    .id = message_id.?,
+                    .result = result,
+                });
             },
 
             else => {

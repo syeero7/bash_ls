@@ -352,6 +352,23 @@ pub const TextDocumentIdentifier = struct {
     uri: String,
 };
 
+pub const HoverParams = struct {
+    textDocument: TextDocumentIdentifier,
+    position: Position,
+    // workDoneToken: ?ProgressToken,
+};
+
+pub const HoverResult = struct {
+    contents: MarkupContent,
+    // FIXME: omit range if null
+    // range: ?Range = null,
+};
+
+pub const MarkupContent = struct {
+    kind: MarkupKind,
+    value: String,
+};
+
 pub fn parseMessage(reader: *Io.Reader, allocator: Allocator) !json.Parsed(Message) {
     return decodeJsonRpc(Message, reader, allocator);
 }

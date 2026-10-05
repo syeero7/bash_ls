@@ -136,4 +136,5 @@ test "calculate offsets" {
     const end_index = positionToIndex(text[start_index..], relative_end, .@"utf-8");
 
     try std.testing.expectEqualStrings(selected_text, text[start_index..(start_index + end_index)]);
+    try std.testing.expect(selected_text.len == (start_index + end_index) - start_index);
 }

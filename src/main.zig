@@ -50,13 +50,16 @@ pub fn main(init: std.process.Init) !void {
     const io = init.io;
     const allocator = init.gpa;
 
-    var arg_iterator = try init.minimal.args.iterateAllocator(allocator);
-    while (arg_iterator.next()) |arg| {
-        if (std.mem.eql(u8, arg, "--log-file")) {
-            if (arg_iterator.next()) |log_file_path| {
-                log_file = try createLogFile(io, log_file_path);
-                arg_iterator.deinit();
-                break;
+    {
+        var arg_iterator = try init.minimal.args.iterateAllocator(allocator);
+        defer arg_iterator.deinit();
+
+        while (arg_iterator.next()) |arg| {
+            if (std.mem.eql(u8, arg, "--log-file")) {
+                if (arg_iterator.next()) |log_file_path| {
+                    log_file = try createLogFile(io, log_file_path);
+                    break;
+                }
             }
         }
     }

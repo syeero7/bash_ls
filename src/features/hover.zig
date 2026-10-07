@@ -2,6 +2,7 @@ const std = @import("std");
 const ts = @import("tree_sitter");
 const protocol = @import("../lsp/protocol.zig");
 
+/// TODO: include more info in hover content.
 pub fn hover(
     allocator: std.mem.Allocator,
     parser: *ts.Parser,
@@ -16,8 +17,8 @@ pub fn hover(
     const node = root_node.descendantForPointRange(point, point) orelse return null;
 
     const start_index = node.startByte();
-    const end_index: usize = node.endByte();
-    if (text.len <= end_index or text.len == start_index) return null;
+    const end_index = node.endByte();
+    if (start_index >= text.len or end_index >= text.len) return null;
 
     return protocol.HoverResult{
         .contents = .{

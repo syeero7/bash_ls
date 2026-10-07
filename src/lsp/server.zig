@@ -3,6 +3,7 @@ const ts = @import("tree_sitter");
 const protocol = @import("protocol.zig");
 const sync = @import("text_document_sync.zig");
 const hover = @import("../features/hover.zig");
+const definition = @import("../features/definition.zig");
 
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
@@ -20,6 +21,7 @@ const Method = enum {
     @"textDocument/didClose",
 
     @"textDocument/hover",
+    @"textDocument/definition",
 
     unknown_method,
 
@@ -112,6 +114,7 @@ pub fn start(io: Io, allocator: Allocator, reader: *Io.Reader, writer: *Io.Write
                             .change = .incremental,
                         },
                         .hoverProvider = true,
+                        .definitionProvider = true,
                     },
                     .serverInfo = .{
                         .name = "bash_ls",
@@ -183,6 +186,21 @@ pub fn start(io: Io, allocator: Allocator, reader: *Io.Reader, writer: *Io.Write
                 const text = text_document.documents.get(parsed_params.value.textDocument.uri) orelse continue;
                 const result = try hover.hover(allocator, parser, text, parsed_params.value.position) orelse continue;
                 try protocol.sendResultResponse(writer, allocator, protocol.HoverResult, .{
+                    .id = message_id.?,
+                    .result = result,
+                });
+            },
+            .@"textDocument/definition" => {
+                const parsed_params = protocol.parseParams(allocator, protocol.DefinitionPrams, message_params.?) catch |err| {
+                    std.log.debug("{s} param parsing failed. err: {any}", .{ message_method_string, err });
+                    try protocol.sendParseErrorResponse(writer, allocator, message_id);
+                    continue;
+                };
+
+                defer parsed_params.deinit();
+                const text = text_document.documents.get(parsed_params.value.textDocument.uri) orelse continue;
+                const result = try definition.definition(allocator, parser, text, parsed_params.value);
+                try protocol.sendResultResponse(writer, allocator, protocol.DefinitionResult, .{
                     .id = message_id.?,
                     .result = result,
                 });

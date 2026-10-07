@@ -233,12 +233,12 @@ pub const StaleRequestSupportOptions = struct {
 pub const ServerCapabilities = struct {
     positionEncoding: ?PositionEncodingKind = null,
     textDocumentSync: ?TextDocumentSyncOptions = null,
+    hoverProvider: ?bool = null, // HoverOptions;
+    definitionProvider: ?bool = null, //DefinitionOptions;
 
     // completionProvider?: CompletionOptions;
-    hoverProvider: ?bool = null, // HoverOptions;
     // signatureHelpProvider?: SignatureHelpOptions;
     // declarationProvider?: boolean | DeclarationOptions
-    // definitionProvider?: boolean | DefinitionOptions;
     // typeDefinitionProvider?: boolean | TypeDefinitionOptions
     //  TypeDefinitionRegistrationOptions;
     // implementationProvider?: boolean | ImplementationOptions
@@ -367,6 +367,20 @@ pub const HoverResult = struct {
 pub const MarkupContent = struct {
     kind: MarkupKind,
     value: String,
+};
+
+pub const DefinitionPrams = struct {
+    textDocument: TextDocumentIdentifier,
+    position: Position,
+    // partialResultToken: ?ProgressToken;
+    // workDoneToken: ?ProgressToken,
+};
+
+pub const DefinitionResult = Location;
+
+pub const Location = struct {
+    uri: String,
+    range: Range,
 };
 
 pub fn parseMessage(reader: *Io.Reader, allocator: Allocator) !json.Parsed(Message) {

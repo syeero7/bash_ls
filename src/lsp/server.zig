@@ -187,10 +187,11 @@ pub fn start(io: Io, allocator: Allocator, reader: *Io.Reader, writer: *Io.Write
                 defer parsed_params.deinit();
                 // FIXME: should return result:null or error instead of continue
                 const text = text_document.documents.get(parsed_params.value.textDocument.uri) orelse continue;
-                const result = try hover.hover(allocator, parser, text, parsed_params.value.position) orelse continue;
+                const hover_result = try hover.hover(allocator, parser, text, parsed_params.value.position);
+                defer if (hover_result) |result| allocator.free(result.contents.value);
                 try protocol.sendResultResponse(writer, allocator, protocol.HoverResult, .{
                     .id = message_id.?,
-                    .result = result,
+                    .result = hover_result,
                 });
             },
             .@"textDocument/definition" => {

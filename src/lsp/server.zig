@@ -4,6 +4,7 @@ const protocol = @import("protocol.zig");
 const sync = @import("text_document_sync.zig");
 const hover = @import("../features/hover.zig");
 const definition = @import("../features/definition.zig");
+const references = @import("../features/references.zig");
 
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
@@ -22,6 +23,7 @@ const Method = enum {
 
     @"textDocument/hover",
     @"textDocument/definition",
+    @"textDocument/references",
 
     unknown_method,
 
@@ -115,6 +117,7 @@ pub fn start(io: Io, allocator: Allocator, reader: *Io.Reader, writer: *Io.Write
                         },
                         .hoverProvider = true,
                         .definitionProvider = true,
+                        .referencesProvider = true,
                     },
                     .serverInfo = .{
                         .name = "bash_ls",
@@ -182,7 +185,7 @@ pub fn start(io: Io, allocator: Allocator, reader: *Io.Reader, writer: *Io.Write
                 };
 
                 defer parsed_params.deinit();
-
+                // FIXME: should return result:null or error instead of continue
                 const text = text_document.documents.get(parsed_params.value.textDocument.uri) orelse continue;
                 const result = try hover.hover(allocator, parser, text, parsed_params.value.position) orelse continue;
                 try protocol.sendResultResponse(writer, allocator, protocol.HoverResult, .{
@@ -198,9 +201,27 @@ pub fn start(io: Io, allocator: Allocator, reader: *Io.Reader, writer: *Io.Write
                 };
 
                 defer parsed_params.deinit();
+                // FIXME: should return result:null or error instead of continue
                 const text = text_document.documents.get(parsed_params.value.textDocument.uri) orelse continue;
                 const result = try definition.definition(allocator, parser, text, parsed_params.value);
                 try protocol.sendResultResponse(writer, allocator, protocol.DefinitionResult, .{
+                    .id = message_id.?,
+                    .result = result,
+                });
+            },
+            .@"textDocument/references" => {
+                const parsed_params = protocol.parseParams(allocator, protocol.ReferenceParams, message_params.?) catch |err| {
+                    std.log.debug("{s} param parsing failed. err: {any}", .{ message_method_string, err });
+                    try protocol.sendParseErrorResponse(writer, allocator, message_id);
+                    continue;
+                };
+
+                defer parsed_params.deinit();
+                // FIXME: should return result:null or error instead of continue
+                const text = text_document.documents.get(parsed_params.value.textDocument.uri) orelse continue;
+                const result = try references.references(allocator, parser, text, parsed_params.value);
+                defer if (result) |locations| allocator.free(locations);
+                try protocol.sendResultResponse(writer, allocator, protocol.ReferenceResult, .{
                     .id = message_id.?,
                     .result = result,
                 });

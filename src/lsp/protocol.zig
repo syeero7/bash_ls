@@ -235,6 +235,7 @@ pub const ServerCapabilities = struct {
     textDocumentSync: ?TextDocumentSyncOptions = null,
     hoverProvider: ?bool = null, // HoverOptions;
     definitionProvider: ?bool = null, //DefinitionOptions;
+    referencesProvider: ?bool = null, // ReferenceOptions;
 
     // completionProvider?: CompletionOptions;
     // signatureHelpProvider?: SignatureHelpOptions;
@@ -382,6 +383,19 @@ pub const Location = struct {
     uri: String,
     range: Range,
 };
+
+pub const ReferenceParams = struct {
+    textDocument: TextDocumentIdentifier,
+    position: Position,
+    context: ReferenceContext,
+    // partialResultToken: ?ProgressToken;
+    // workDoneToken: ?ProgressToken,
+
+};
+
+const ReferenceContext = struct { includeDeclaration: bool };
+
+pub const ReferenceResult = []Location;
 
 pub fn parseMessage(reader: *Io.Reader, allocator: Allocator) !json.Parsed(Message) {
     return decodeJsonRpc(Message, reader, allocator);

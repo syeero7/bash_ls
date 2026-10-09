@@ -165,13 +165,14 @@ fn findNodes(
                     }
                 },
                 .variable => {
+                    if (!std.mem.eql(u8, node_kind, "variable_name")) break :find_match;
                     if (!found_first_match) {
                         found_first_match = true;
                         if (opt.capture == .exclude_first) break :find_match;
                     }
 
-                    if (!std.mem.eql(u8, node_kind, "variable_name")) break :find_match;
                     try items.append(allocator, tsNodeToRange(current_node));
+                    if (only_first_capture) return try items.toOwnedSlice(allocator);
                 },
             }
         }
@@ -242,6 +243,16 @@ test "find nodes" {
         .filter_text = "VAR_1",
     });
     try std.testing.expect(result.len == 6);
+    allocator.free(result);
+
+    result = try findNodes(allocator, root_node, text, .{
+        .kind = .variable,
+        .capture = .only_first,
+        .filter_text = "VAR_2",
+    });
+    try std.testing.expect(result.len == 1);
+    try std.testing.expect(result[0].start.line == 1);
+    try std.testing.expect(result[0].start.character == 1);
     allocator.free(result);
 
     result = try findNodes(allocator, root_node, text, .{

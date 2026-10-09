@@ -24,7 +24,7 @@ pub fn definition(
 
     const start_index = current_node.startByte();
     const end_index = current_node.endByte();
-    if (start_index >= text.len or end_index >= text.len) return null;
+    if (start_index >= text.len or end_index > text.len) return null;
 
     const node_text = text[start_index..end_index];
     const lang = root_node.getLanguage();
@@ -65,7 +65,7 @@ fn findNode(cursor: *ts.QueryCursor, haystack: []const u8, needle: []const u8) ?
         const start = node.startByte();
         const end = node.endByte();
 
-        if (start >= haystack.len or end >= haystack.len) continue;
+        if (start >= haystack.len or end > haystack.len) continue;
         if (!std.mem.eql(u8, haystack[start..end], needle)) continue;
         std.log.debug("capture: {s}\n", .{haystack[start..end]});
         return node;

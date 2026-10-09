@@ -18,7 +18,7 @@ pub fn hover(
 
     const start_index = node.startByte();
     const end_index = node.endByte();
-    if (start_index >= text.len or end_index >= text.len) return null;
+    if (start_index >= text.len or end_index > text.len) return null;
 
     return protocol.HoverResult{
         .contents = .{

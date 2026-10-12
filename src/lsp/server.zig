@@ -65,7 +65,7 @@ pub fn start(
                     const func_params = func_type.@"fn".params;
                     if (comptime func_params.len == 4) {
                         const Params = comptime func_params[3].type orelse unreachable;
-                        const return_info = comptime @typeInfo(MethodResultType(func.name));
+                        const return_type = comptime @typeInfo(MethodResultType(func.name));
 
                         switch (@typeInfo(Params)) {
                             .@"struct" => {
@@ -79,14 +79,14 @@ pub fn start(
                                     continue :server_loop;
                                 };
 
-                                try jsonrpc.sendResultResponse(writer, arena, return_info.error_union.payload, .{
+                                try jsonrpc.sendResultResponse(writer, arena, return_type.error_union.payload, .{
                                     .id = message_id,
                                     .result = result,
                                 });
                                 continue :server_loop;
                             },
                             .void => {
-                                if (return_info == .void) {
+                                if (return_type == .void) {
                                     @call(.auto, method_func, .{ handler, gpa, arena, {} });
                                     continue :server_loop;
                                 }

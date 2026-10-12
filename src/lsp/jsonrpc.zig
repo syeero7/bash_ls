@@ -56,7 +56,7 @@ pub fn sendParseErrorResponse(writer: *Io.Writer, allocator: Allocator, id: ?typ
 const field_separator = "\r\n\r\n";
 const header_field_name = "Content-Length: ";
 
-fn encodeJsonRpc(allocator: Allocator, json_struct: anytype) ![]u8 {
+pub fn encodeJsonRpc(allocator: Allocator, json_struct: anytype) ![]u8 {
     const content = try json.Stringify.valueAlloc(allocator, json_struct, .{});
     std.log.debug("json string: {s}", .{content});
     defer allocator.free(content);

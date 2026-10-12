@@ -1,5 +1,8 @@
 const std = @import("std");
 const server = @import("lsp/server.zig");
+const Handler = @import("Handler.zig");
+const ts_bash = @import("lib/tree_sitter.zig");
+const ts = @import("tree_sitter");
 
 pub const std_options: std.Options = .{
     .log_level = .debug,
@@ -48,10 +51,9 @@ fn createLogFile(io: std.Io, log_file_path: []const u8) !?std.Io.File {
 
 pub fn main(init: std.process.Init) !void {
     const io = init.io;
-    const allocator = init.gpa;
 
     {
-        var arg_iterator = try init.minimal.args.iterateAllocator(allocator);
+        var arg_iterator = try init.minimal.args.iterateAllocator(init.gpa);
         defer arg_iterator.deinit();
 
         while (arg_iterator.next()) |arg| {
@@ -77,7 +79,17 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
     const writer = &stdout_writer.interface;
 
-    try server.start(io, allocator, reader, writer);
+    const lang = ts_bash.getLang();
+    defer lang.destroy();
+
+    const parser = ts.Parser.create();
+    defer parser.destroy();
+    try parser.setLanguage(lang);
+
+    var handler = Handler.init(init.gpa, lang, parser);
+    defer handler.deinit(init.gpa);
+
+    try server.start(init.gpa, init.arena, &handler, reader, writer);
 }
 
 test {

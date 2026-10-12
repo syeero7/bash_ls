@@ -13,7 +13,7 @@ const LSPAny = json.Value;
 const LSPObject = std.StringHashMap(LSPAny);
 const LSPArray = []LSPAny;
 
-const ID = union(enum) {
+pub const ID = union(enum) {
     integer: i64,
     string: String,
 
@@ -32,7 +32,7 @@ const ID = union(enum) {
     }
 };
 
-const Message = struct {
+pub const Message = struct {
     jsonrpc: []const u8 = "2.0",
     id: ?ID = null,
     method: String = undefined,
@@ -67,7 +67,7 @@ const ErrorCode = enum(Integer) {
     }
 };
 
-const ResponseError = struct {
+pub const ResponseError = struct {
     jsonrpc: []const u8 = "2.0",
     id: ?ID = null,
     @"error": struct {
@@ -77,10 +77,10 @@ const ResponseError = struct {
     },
 };
 
-fn ResponseResult(comptime T: type) type {
+pub fn ResponseResult(comptime T: type) type {
     return struct {
         jsonrpc: []const u8 = "2.0",
-        id: ID = undefined,
+        id: ?ID = null,
         result: ?T = null,
     };
 }

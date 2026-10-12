@@ -27,8 +27,7 @@ pub fn initialize(
     _: Allocator,
     params: types.InitializeParams,
 ) !types.InitializeResult {
-    if (params.capabilities.supportUtf8Encoding()) self.setPositionEncoding(.@"utf-8");
-    std.log.debug("{any}\n", .{params});
+    if (params.capabilities.supportUtf8Encoding()) self.encoding = .@"utf-8";
 
     // FIXME: support utf-16 position encoding
     std.debug.assert(self.encoding == .@"utf-8");
@@ -65,8 +64,9 @@ pub fn shutdown(
     _: Allocator,
     _: Allocator,
     _: void,
-) void {
+) ?void {
     self.server_state = .shutdown;
+    return null;
 }
 
 pub fn exit(
@@ -88,8 +88,14 @@ pub fn @"textDocument/hover"(
     _ = self;
     _ = gpa;
 
-    std.debug.print("hover uri {s} \n", .{params.textDocument.uri});
-    return .{ .contents = .{ .kind = .plaintext, .value = try std.fmt.allocPrint(arena, "[some thing] {s}\n other thing {s}", .{ "stuff", params.textDocument.uri }) } };
+    // TODO:
+    return .{ .contents = .{
+        .kind = .plaintext,
+        .value = try std.fmt.allocPrint(arena, "[some thing] {s}\n other thing {s}", .{
+            "stuff",
+            params.textDocument.uri,
+        }),
+    } };
 }
 
 pub fn init(gpa: Allocator, language: *ts.Language, parser: *ts.Parser) @This() {
@@ -105,8 +111,4 @@ pub fn deinit(self: *@This(), gpa: Allocator) void {
 
     self.documents.deinit();
     self.* = undefined;
-}
-
-pub fn setPositionEncoding(self: *@This(), encoding: Encoding) void {
-    self.encoding = encoding;
 }

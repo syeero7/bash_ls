@@ -145,6 +145,43 @@ pub fn @"textDocument/didClose"(
     gpa.free(entry.value);
 }
 
+pub fn @"textDocument/references"(
+    self: *@This(),
+    _: Allocator,
+    arena: Allocator,
+    params: types.ReferenceParams,
+) !?types.ReferenceResult {
+    const document_uri = params.textDocument.uri;
+    const document = self.documents.get(document_uri) orelse return null;
+    const tree = self.parser.parseString(document, null) orelse return null;
+    defer tree.destroy();
+
+    const root_node = tree.rootNode();
+    const current_node = ts_bash.getCurrentNode(root_node, params.position) orelse return null;
+    const is_function = ts_bash.isFunctionForReal(current_node, document);
+    if (!is_function and !ts_bash.isVariable(current_node.kind())) return null;
+
+    const node_range = ts_bash.getNodeRange(current_node, document.len) orelse return null;
+    const ranges = try ts_bash.getMatchingNodeRanges(arena, root_node, document, .{
+        .kind = if (is_function) .function else .variable,
+        .capture = if (params.context.includeDeclaration) .all else .exclude_first,
+        .node_text = document[node_range.start..node_range.end],
+    });
+
+    if (ranges.len == 0) return null;
+    var locations: std.ArrayList(types.Location) = try .initCapacity(arena, ranges.len);
+    errdefer locations.deinit(arena);
+
+    for (ranges) |range| {
+        try locations.append(arena, .{
+            .uri = document_uri,
+            .range = range,
+        });
+    }
+
+    return try locations.toOwnedSlice(arena);
+}
+
 pub fn @"textDocument/hover"(
     self: *@This(),
     _: Allocator,

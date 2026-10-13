@@ -100,6 +100,18 @@ pub fn start(
                                 };
 
                                 defer parsed_params.deinit();
+                                if (return_type == .void) {
+                                    @call(.auto, method_func, .{ handler, gpa, arena, parsed_params.value });
+                                    continue :server_loop;
+                                }
+
+                                if (return_type == .error_union and return_type.error_union.payload == void) {
+                                    @call(.auto, method_func, .{ handler, gpa, arena, parsed_params.value }) catch |err| {
+                                        std.log.debug("method {s} failed. err: {any}", .{ func.name, err });
+                                    };
+                                    continue :server_loop;
+                                }
+
                                 const result = @call(.auto, method_func, .{ handler, gpa, arena, parsed_params.value }) catch |err| {
                                     std.log.debug("method {s} failed. err: {any}", .{ func.name, err });
                                     continue :server_loop;

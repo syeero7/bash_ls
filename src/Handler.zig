@@ -1,6 +1,7 @@
 const std = @import("std");
 const ts = @import("tree_sitter");
 const types = @import("lsp/types.zig");
+const offsets = @import("lib/offsets.zig");
 
 const Allocator = std.mem.Allocator;
 
@@ -77,6 +78,70 @@ pub fn exit(
 ) !void {
     if (self.server_state == .shutdown) return error.ExitServer;
     return error.ExitWithoutShutdown;
+}
+
+pub fn @"textDocument/didOpen"(
+    self: *@This(),
+    gpa: Allocator,
+    _: Allocator,
+    params: types.DidOpenTextDocumentParams,
+) !void {
+    const text_document = params.textDocument;
+    std.log.debug("file opened. uri {s}", .{text_document.uri});
+    const text = try gpa.dupe(u8, text_document.text);
+    errdefer gpa.free(text);
+
+    const result = try self.documents.getOrPut(text_document.uri);
+    if (result.found_existing) {
+        gpa.free(result.value_ptr.*);
+        result.value_ptr.* = text;
+        return;
+    }
+
+    result.key_ptr.* = try gpa.dupe(u8, text_document.uri);
+    result.value_ptr.* = text;
+}
+
+pub fn @"textDocument/didChange"(
+    self: *@This(),
+    gpa: Allocator,
+    _: Allocator,
+    params: types.DidChangeTextDocumentParams,
+) !void {
+    const current_text = self.documents.getPtr(params.textDocument.uri) orelse return;
+    var buffer: std.ArrayList(u8) = .empty;
+    errdefer buffer.deinit(gpa);
+    try buffer.appendSlice(gpa, current_text.*);
+
+    for (params.contentChanges) |change| {
+        if (change.range) |range| {
+            const start_index = offsets.positionToIndex(buffer.items, range.start, self.encoding);
+            const relative_end = offsets.getRelativeEndPosition(range.start, range.end);
+            const end_index = offsets.positionToIndex(buffer.items[start_index..], relative_end, self.encoding);
+            const length = (start_index + end_index) - start_index;
+            try buffer.replaceRange(gpa, start_index, length, change.text);
+            continue;
+        }
+
+        // NOTE: if range is null client sent the whole document
+        buffer.clearRetainingCapacity();
+        try buffer.appendSlice(gpa, change.text);
+    }
+
+    const new_text = try buffer.toOwnedSlice(gpa);
+    gpa.free(current_text.*);
+    current_text.* = new_text;
+}
+
+pub fn @"textDocument/didClose"(
+    self: *@This(),
+    gpa: Allocator,
+    _: Allocator,
+    params: types.DidCloseTextDocumentParams,
+) void {
+    const entry = self.documents.fetchRemove(params.textDocument.uri) orelse return;
+    gpa.free(entry.key);
+    gpa.free(entry.value);
 }
 
 pub fn @"textDocument/hover"(

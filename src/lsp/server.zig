@@ -2,7 +2,6 @@ const std = @import("std");
 const ts = @import("tree_sitter");
 const jsonrpc = @import("jsonrpc.zig");
 const types = @import("types.zig");
-const ts_bash = @import("../lib/tree_sitter.zig");
 const Handler = @import("../Handler.zig");
 
 // const protocol = @import("protocol.zig");

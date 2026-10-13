@@ -1,7 +1,7 @@
 const std = @import("std");
 const server = @import("lsp/server.zig");
 const Handler = @import("Handler.zig");
-const ts_bash = @import("lib/tree_sitter.zig");
+const ts_bash = @import("lib/tree_sitter_bash.zig");
 const ts = @import("tree_sitter");
 
 pub const std_options: std.Options = .{

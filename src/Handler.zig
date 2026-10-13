@@ -2,6 +2,7 @@ const std = @import("std");
 const ts = @import("tree_sitter");
 const types = @import("lsp/types.zig");
 const offsets = @import("lib/offsets.zig");
+const ts_bash = @import("lib/tree_sitter_bash.zig");
 
 const Allocator = std.mem.Allocator;
 
@@ -146,21 +147,28 @@ pub fn @"textDocument/didClose"(
 
 pub fn @"textDocument/hover"(
     self: *@This(),
-    gpa: Allocator,
+    _: Allocator,
     arena: Allocator,
     params: types.HoverParams,
-) !types.Hover {
-    _ = self;
-    _ = gpa;
+) !?types.Hover {
+    const document = self.documents.get(params.textDocument.uri) orelse return null;
+    const tree = self.parser.parseString(document, null) orelse return null;
+    defer tree.destroy();
 
-    // TODO:
-    return .{ .contents = .{
-        .kind = .plaintext,
-        .value = try std.fmt.allocPrint(arena, "[some thing] {s}\n other thing {s}", .{
-            "stuff",
-            params.textDocument.uri,
-        }),
-    } };
+    const root_node = tree.rootNode();
+    const current_node = ts_bash.getCurrentNode(root_node, params.position) orelse return null;
+    const node_range = ts_bash.getNodeRange(current_node, document.len) orelse return null;
+
+    // TODO: include more info in hover content
+    return .{
+        .contents = .{
+            .kind = .markdown,
+            .value = try std.fmt.allocPrint(arena, "```bash\n{s} {s}\n```", .{
+                current_node.kind(),
+                document[node_range.start..node_range.end],
+            }),
+        },
+    };
 }
 
 pub fn init(gpa: Allocator, language: *ts.Language, parser: *ts.Parser) @This() {

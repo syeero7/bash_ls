@@ -29,7 +29,7 @@ pub fn start(
 
         const parsed_message = jsonrpc.parseMessage(reader, arena) catch |err| {
             if (err == error.EndOfStream) return err;
-            std.log.debug("message parsing failed. err: {any}", .{err});
+            std.log.debug("message parsing failed. err: {any}\n", .{err});
             try jsonrpc.sendParseErrorResponse(writer, arena, null);
             continue;
         };
@@ -52,7 +52,7 @@ pub fn start(
         }
 
         if (handler.server_state == .shutdown and !std.mem.eql(u8, "exit", message.method)) {
-            std.log.debug("invalid request received. method: {s}", .{message.method});
+            std.log.debug("invalid request received. method: {s}\n", .{message.method});
             try jsonrpc.sendErrorResponse(writer, arena, .{
                 .id = message.id,
                 .@"error" = .{
@@ -64,85 +64,86 @@ pub fn start(
         }
 
         inline for (@typeInfo(Handler).@"struct".decls) |func| {
-            if (comptime isLspMethodFunc(func.name)) {
-                if (std.mem.eql(u8, func.name, message.method)) {
-                    const method_func = @field(Handler, func.name);
-                    const func_type = @typeInfo(@TypeOf(method_func));
-                    comptime std.debug.assert(func_type == .@"fn");
+            if (comptime !isLspMethodFunc(func.name)) comptime continue;
+            if (std.mem.eql(u8, func.name, message.method)) {
+                const method_func = @field(Handler, func.name);
+                const func_type = @typeInfo(@TypeOf(method_func));
+                comptime std.debug.assert(func_type == .@"fn");
+                const func_params = func_type.@"fn".params;
+                comptime std.debug.assert(func_params.len == 4);
 
-                    const func_params = func_type.@"fn".params;
-                    if (comptime func_params.len == 4) {
-                        const Params = comptime func_params[3].type orelse unreachable;
-                        var parsed_params: ?std.json.Parsed(Params) = null;
-                        defer if (parsed_params) |params| params.deinit();
+                const Params = comptime func_params[3].type orelse unreachable;
+                var parsed_params: ?std.json.Parsed(Params) = null;
+                defer if (parsed_params) |params| params.deinit();
 
-                        const params = sw: switch (@typeInfo(Params)) {
-                            .@"struct" => {
-                                parsed_params = jsonrpc.parseParams(arena, Params, message.params.?) catch |err| {
-                                    if (err == error.EndOfStream) return err;
-                                    try jsonrpc.sendParseErrorResponse(writer, arena, null);
+                const params = sw: switch (@typeInfo(Params)) {
+                    .@"struct" => {
+                        parsed_params = jsonrpc.parseParams(arena, Params, message.params.?) catch |err| {
+                            if (err == error.EndOfStream) return err;
+                            try jsonrpc.sendParseErrorResponse(writer, arena, null);
+                            continue :server_loop;
+                        };
+
+                        break :sw parsed_params.?.value;
+                    },
+                    .void => break :sw {},
+                    else => comptime unreachable,
+                };
+
+                const func_args = .{ handler, gpa, arena, params };
+                switch (comptime @typeInfo(MethodResultType(func.name))) {
+                    .void => @call(.auto, method_func, func_args),
+                    .optional => {
+                        if (comptime !std.mem.eql(u8, func.name, "shutdown")) comptime unreachable;
+                        _ = @call(.auto, method_func, func_args);
+                        try jsonrpc.sendResultResponse(writer, arena, struct {}, .{
+                            .id = message.id,
+                            .result = null,
+                        });
+                    },
+                    .error_union => |err_union| {
+                        const payload_type = comptime @typeInfo(err_union.payload);
+                        switch (payload_type) {
+                            .optional, .@"struct" => {
+                                if (comptime payload_type == .optional) {
+                                    const optional_child = comptime @typeInfo(payload_type.optional.child);
+                                    if (comptime optional_child != .@"struct" and optional_child == .pointer and
+                                        @typeInfo(optional_child.pointer.child) != .@"struct") comptime unreachable;
+                                }
+
+                                const result = @call(.auto, method_func, func_args) catch |err| {
+                                    // TODO: send error response
+                                    std.log.debug("method {s} failed. err: {any}\n", .{ func.name, err });
                                     continue :server_loop;
                                 };
 
-                                break :sw parsed_params.?.value;
-                            },
-                            .void => break :sw {},
-                            else => comptime unreachable,
-                        };
-
-                        const func_args = .{ handler, gpa, arena, params };
-                        switch (comptime @typeInfo(MethodResultType(func.name))) {
-                            .void => @call(.auto, method_func, func_args),
-                            .optional => {
-                                if (comptime !std.mem.eql(u8, func.name, "shutdown")) comptime unreachable;
-                                _ = @call(.auto, method_func, func_args);
-                                try jsonrpc.sendResultResponse(writer, arena, struct {}, .{
+                                try jsonrpc.sendResultResponse(writer, arena, err_union.payload, .{
                                     .id = message.id,
-                                    .result = null,
+                                    .result = result,
                                 });
                             },
-                            .error_union => |err_union| {
-                                const payload_type = comptime @typeInfo(err_union.payload);
-                                switch (payload_type) {
-                                    .optional, .@"struct" => {
-                                        if (comptime payload_type == .optional) {
-                                            const optional_child = comptime @typeInfo(payload_type.optional.child);
-                                            if (comptime optional_child != .@"struct" and optional_child == .pointer and
-                                                @typeInfo(optional_child.pointer.child) != .@"struct") comptime unreachable;
+
+                            .void => {
+                                @call(.auto, method_func, func_args) catch |err| {
+                                    if (comptime std.mem.eql(u8, func.name, "exit")) {
+                                        switch (err) {
+                                            error.ExitServer => return,
+                                            error.ExitWithoutShutdown => return err,
                                         }
-
-                                        const result = @call(.auto, method_func, func_args) catch |err| {
-                                            // TODO: send error response
-                                            std.log.debug("method {s} failed. err: {any}", .{ func.name, err });
-                                            continue :server_loop;
-                                        };
-
-                                        try jsonrpc.sendResultResponse(writer, arena, err_union.payload, .{
-                                            .id = message.id,
-                                            .result = result,
-                                        });
-                                    },
-
-                                    .void => {
-                                        @call(.auto, method_func, func_args) catch |err| {
-                                            if (comptime std.mem.eql(u8, func.name, "exit")) {
-                                                switch (err) {
-                                                    error.ExitServer => return,
-                                                    error.ExitWithoutShutdown => return err,
-                                                }
-                                            }
-                                            // TODO: send error response
-                                            std.log.debug("method {s} failed. err: {any}", .{ func.name, err });
-                                        };
-                                    },
-                                    else => comptime unreachable,
-                                }
+                                    }
+                                    // TODO: send error response
+                                    std.log.debug("method {s} failed. err: {any}\n", .{ func.name, err });
+                                };
                             },
                             else => comptime unreachable,
                         }
-                    }
+                    },
+                    else => comptime unreachable,
                 }
             }
+        } else {
+            // TODO: err response ?
+            std.log.debug("not implemented method: {s}\n", .{message.method});
         }
     }
 }

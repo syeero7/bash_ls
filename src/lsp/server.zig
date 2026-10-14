@@ -73,64 +73,70 @@ pub fn start(
                     const func_params = func_type.@"fn".params;
                     if (comptime func_params.len == 4) {
                         const Params = comptime func_params[3].type orelse unreachable;
-                        const return_type = comptime @typeInfo(MethodResultType(func.name));
+                        var parsed_params: ?std.json.Parsed(Params) = null;
+                        defer if (parsed_params) |params| params.deinit();
 
-                        switch (comptime @typeInfo(Params)) {
+                        const params = sw: switch (@typeInfo(Params)) {
                             .@"struct" => {
-                                const parsed_params = jsonrpc.parseParams(arena, Params, message.params.?) catch |err| {
+                                parsed_params = jsonrpc.parseParams(arena, Params, message.params.?) catch |err| {
                                     if (err == error.EndOfStream) return err;
                                     try jsonrpc.sendParseErrorResponse(writer, arena, null);
                                     continue :server_loop;
                                 };
 
-                                defer parsed_params.deinit();
-                                if (return_type == .void) {
-                                    @call(.auto, method_func, .{ handler, gpa, arena, parsed_params.value });
-                                    continue :server_loop;
-                                }
-
-                                if (return_type == .error_union and return_type.error_union.payload == void) {
-                                    @call(.auto, method_func, .{ handler, gpa, arena, parsed_params.value }) catch |err| {
-                                        std.log.debug("method {s} failed. err: {any}", .{ func.name, err });
-                                    };
-                                    continue :server_loop;
-                                }
-
-                                const result = @call(.auto, method_func, .{ handler, gpa, arena, parsed_params.value }) catch |err| {
-                                    std.log.debug("method {s} failed. err: {any}", .{ func.name, err });
-                                    continue :server_loop;
-                                };
-
-                                try jsonrpc.sendResultResponse(writer, arena, return_type.error_union.payload, .{
-                                    .id = message.id,
-                                    .result = result,
-                                });
-                                continue :server_loop;
+                                break :sw parsed_params.?.value;
                             },
-                            .void => {
-                                if (return_type == .void) {
-                                    @call(.auto, method_func, .{ handler, gpa, arena, {} });
-                                    continue :server_loop;
+                            .void => break :sw {},
+                            else => comptime unreachable,
+                        };
+
+                        const func_args = .{ handler, gpa, arena, params };
+                        switch (comptime @typeInfo(MethodResultType(func.name))) {
+                            .void => @call(.auto, method_func, func_args),
+                            .optional => {
+                                if (comptime !std.mem.eql(u8, func.name, "shutdown")) comptime unreachable;
+                                _ = @call(.auto, method_func, func_args);
+                                try jsonrpc.sendResultResponse(writer, arena, struct {}, .{
+                                    .id = message.id,
+                                    .result = null,
+                                });
+                            },
+                            .error_union => |err_union| {
+                                const payload_type = comptime @typeInfo(err_union.payload);
+                                switch (payload_type) {
+                                    .optional, .@"struct" => {
+                                        if (comptime payload_type == .optional) {
+                                            const optional_child = comptime @typeInfo(payload_type.optional.child);
+                                            if (comptime optional_child != .@"struct" and optional_child == .pointer and
+                                                @typeInfo(optional_child.pointer.child) != .@"struct") comptime unreachable;
+                                        }
+
+                                        const result = @call(.auto, method_func, func_args) catch |err| {
+                                            // TODO: send error response
+                                            std.log.debug("method {s} failed. err: {any}", .{ func.name, err });
+                                            continue :server_loop;
+                                        };
+
+                                        try jsonrpc.sendResultResponse(writer, arena, err_union.payload, .{
+                                            .id = message.id,
+                                            .result = result,
+                                        });
+                                    },
+
+                                    .void => {
+                                        @call(.auto, method_func, func_args) catch |err| {
+                                            if (comptime std.mem.eql(u8, func.name, "exit")) {
+                                                switch (err) {
+                                                    error.ExitServer => return,
+                                                    error.ExitWithoutShutdown => return err,
+                                                }
+                                            }
+                                            // TODO: send error response
+                                            std.log.debug("method {s} failed. err: {any}", .{ func.name, err });
+                                        };
+                                    },
+                                    else => comptime unreachable,
                                 }
-
-                                if (return_type == .optional and return_type.optional.child == void) {
-                                    _ = @call(.auto, method_func, .{ handler, gpa, arena, {} });
-                                    try jsonrpc.sendResultResponse(writer, arena, struct {}, .{
-                                        .id = message.id,
-                                        .result = null,
-                                    });
-                                    continue :server_loop;
-                                }
-
-                                @call(.auto, method_func, .{ handler, gpa, arena, {} }) catch |err| {
-                                    switch (err) {
-                                        error.ExitServer => return,
-                                        error.ExitWithoutShutdown => return err,
-                                    }
-
-                                    std.log.debug("method {s} failed. err: {any}", .{ func.name, err });
-                                };
-                                continue :server_loop;
                             },
                             else => comptime unreachable,
                         }

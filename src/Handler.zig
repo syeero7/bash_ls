@@ -222,17 +222,25 @@ pub fn @"textDocument/hover"(
     const root_node = tree.rootNode();
     const current_node = ts_bash.getCurrentNode(root_node, params.position) orelse return null;
     const node_range = ts_bash.getNodeRange(current_node, document.len) orelse return null;
+    const node_text = document[node_range.start..node_range.end];
+    if (ts_bash.isReservedWord(node_text)) return null;
+    var hover: types.Hover = .{ .contents = .{ .kind = .markdown, .value = undefined } };
 
-    // TODO: include more info in hover content
-    return .{
-        .contents = .{
-            .kind = .markdown,
-            .value = try std.fmt.allocPrint(arena, "```bash\n{s} {s}\n```", .{
-                current_node.kind(),
-                document[node_range.start..node_range.end],
-            }),
-        },
-    };
+    if (ts_bash.isFunctionForReal(current_node, document)) {
+        hover.contents.value = try std.fmt.allocPrint(arena, "```bash\n{s}\n```", .{
+            try ts_bash.getFunctionDefinitionText(arena, root_node, document, node_text) orelse return null,
+        });
+        return hover;
+    }
+
+    const node_kind = current_node.kind();
+    // TODO: for variables show recently assigned value
+
+    hover.contents.value = try std.fmt.allocPrint(arena, "**{s}**\n```bash\n{s}\n```", .{
+        node_kind,
+        node_text,
+    });
+    return hover;
 }
 
 pub fn init(gpa: Allocator, language: *ts.Language, parser: *ts.Parser) @This() {

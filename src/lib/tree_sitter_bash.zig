@@ -82,6 +82,57 @@ pub fn isVariable(node_kind: []const u8) bool {
     return mem.eql(u8, node_kind, "variable_name");
 }
 
+pub fn isString(node_kind: []const u8) bool {
+    inline for ([_][]const u8{
+        "string",        "raw_string",     "heredoc_body",
+        "heredoc_start", "string_content",
+    }) |string_kind| {
+        if (mem.eql(u8, string_kind, node_kind)) return true;
+    }
+    return false;
+}
+
+pub fn isFunctionDefinition(node_kind: []const u8) bool {
+    return mem.eql(u8, node_kind, "function_definition");
+}
+
+pub fn getFunctionDefinitionText(
+    allocator: mem.Allocator,
+    root_node: ts.Node,
+    document: []const u8,
+    node_text: []const u8,
+) !?[]const u8 {
+    const locations = try getMatchingNodeRanges(allocator, root_node, document, .{
+        .kind = .function,
+        .capture = .only_first,
+        .node_text = node_text,
+    });
+
+    if (locations.len == 0) return null;
+    const current_node = getCurrentNode(root_node, locations[0].start) orelse return null;
+    if (current_node.parent()) |parent_node| {
+        if (!isFunctionDefinition(parent_node.kind())) return null;
+        const node_range = getNodeRange(parent_node, document.len) orelse return null;
+        return document[node_range.start..node_range.end];
+    }
+
+    return null;
+}
+
+// source: https://www.gnu.org/software/bash/manual/bash.html#Reserved-Words-1
+pub fn isReservedWord(node_text: []const u8) bool {
+    inline for ([_][]const u8{
+        "if",   "then", "elif",   "else",   "fi",       "time",
+        "for",  "in",   "until",  "while",  "do",       "done",
+        "case", "esac", "coproc", "select", "function", "{",
+        "}",    "[[",   "]]",     "!",
+    }) |word| {
+        if (std.mem.eql(u8, word, node_text)) return true;
+    }
+
+    return false;
+}
+
 pub fn getMatchingNodeRanges(
     allocator: mem.Allocator,
     root_node: ts.Node,

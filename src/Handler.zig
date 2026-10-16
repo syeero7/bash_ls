@@ -3,6 +3,7 @@ const ts = @import("tree_sitter");
 const types = @import("lsp/types.zig");
 const offsets = @import("lib/offsets.zig");
 const ts_bash = @import("lib/tree_sitter_bash.zig");
+const bash_commands = @import("lib/commands.zig");
 
 const Allocator = std.mem.Allocator;
 
@@ -22,6 +23,7 @@ encoding: Encoding = .@"utf-16",
 server_state: State = .not_initialized,
 lang: *ts.Language,
 parser: *ts.Parser,
+commands: ?bash_commands.CommandHelp,
 
 pub fn initialize(
     self: *@This(),
@@ -226,6 +228,13 @@ pub fn @"textDocument/hover"(
     if (ts_bash.isReservedWord(node_text)) return null;
     var hover: types.Hover = .{ .contents = .{ .kind = .markdown, .value = undefined } };
 
+    if (self.commands) |commands| {
+        if (commands.get(node_text)) |cmd_help| {
+            hover.contents.value = try std.fmt.allocPrint(arena, "```text\n{s}\n``` ", .{cmd_help});
+            return hover;
+        }
+    }
+
     if (ts_bash.isFunctionForReal(current_node, document)) {
         hover.contents.value = try std.fmt.allocPrint(arena, "```bash\n{s}\n```", .{
             try ts_bash.getFunctionDefinitionText(arena, root_node, document, node_text) orelse return null,
@@ -243,8 +252,18 @@ pub fn @"textDocument/hover"(
     return hover;
 }
 
-pub fn init(gpa: Allocator, language: *ts.Language, parser: *ts.Parser) @This() {
-    return .{ .documents = .init(gpa), .lang = language, .parser = parser };
+pub fn init(
+    gpa: Allocator,
+    language: *ts.Language,
+    parser: *ts.Parser,
+    commands: ?bash_commands.CommandHelp,
+) @This() {
+    return .{
+        .documents = .init(gpa),
+        .lang = language,
+        .parser = parser,
+        .commands = commands,
+    };
 }
 
 pub fn deinit(self: *@This(), gpa: Allocator) void {
@@ -252,6 +271,15 @@ pub fn deinit(self: *@This(), gpa: Allocator) void {
     while (doc_iterator.next()) |entry| {
         gpa.free(entry.key_ptr.*);
         gpa.free(entry.value_ptr.*);
+    }
+
+    if (self.commands) |_| {
+        var cmd_iterator = self.commands.?.iterator();
+        while (cmd_iterator.next()) |entry| {
+            gpa.free(entry.key_ptr.*);
+            gpa.free(entry.value_ptr.*);
+        }
+        self.commands.?.deinit();
     }
 
     self.documents.deinit();

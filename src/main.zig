@@ -1,8 +1,9 @@
 const std = @import("std");
-const server = @import("lsp/server.zig");
-const Handler = @import("Handler.zig");
-const ts_bash = @import("lib/tree_sitter_bash.zig");
 const ts = @import("tree_sitter");
+const server = @import("lsp/server.zig");
+const ts_bash = @import("lib/tree_sitter_bash.zig");
+const bash_commands = @import("lib/commands.zig");
+const Handler = @import("Handler.zig");
 
 pub const std_options: std.Options = .{
     .log_level = .debug,
@@ -51,6 +52,7 @@ fn createLogFile(io: std.Io, log_file_path: []const u8) !?std.Io.File {
 
 pub fn main(init: std.process.Init) !void {
     const io = init.io;
+    var commands: ?bash_commands.CommandHelp = null;
 
     {
         var arg_iterator = try init.minimal.args.iterateAllocator(init.gpa);
@@ -60,7 +62,14 @@ pub fn main(init: std.process.Init) !void {
             if (std.mem.eql(u8, arg, "--log-file")) {
                 if (arg_iterator.next()) |log_file_path| {
                     log_file = try createLogFile(io, log_file_path);
-                    break;
+                    continue;
+                }
+            }
+
+            if (std.mem.eql(u8, arg, "--command-help")) {
+                if (arg_iterator.next()) |commands_file_path| {
+                    commands = bash_commands.generateCommandHelp(io, init.gpa, commands_file_path) catch null;
+                    continue;
                 }
             }
         }
@@ -86,7 +95,7 @@ pub fn main(init: std.process.Init) !void {
     defer parser.destroy();
     try parser.setLanguage(lang);
 
-    var handler = Handler.init(init.gpa, lang, parser);
+    var handler = Handler.init(init.gpa, lang, parser, commands);
     defer handler.deinit(init.gpa);
 
     try server.start(init.gpa, init.arena, &handler, reader, writer);

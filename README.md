@@ -6,6 +6,7 @@ A language server for bash
 
 - Find all references
 - Go to definition
+- Completion
 - Hover
 
 ## Usage

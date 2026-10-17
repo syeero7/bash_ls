@@ -80,6 +80,7 @@ pub fn start(
                     .@"struct" => {
                         parsed_params = jsonrpc.parseParams(arena, Params, message.params.?) catch |err| {
                             if (err == error.EndOfStream) return err;
+                            std.log.debug("{s} param parsing failed. err: {any}\n", .{ message.method, err });
                             try jsonrpc.sendParseErrorResponse(writer, arena, null);
                             continue :server_loop;
                         };

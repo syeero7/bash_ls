@@ -236,8 +236,8 @@ pub const ServerCapabilities = struct {
     hoverProvider: ?bool = null, // HoverOptions;
     definitionProvider: ?bool = null, //DefinitionOptions;
     referencesProvider: ?bool = null, // ReferenceOptions;
+    completionProvider: ?CompletionOptions = null,
 
-    // completionProvider?: CompletionOptions;
     // signatureHelpProvider?: SignatureHelpOptions;
     // declarationProvider?: boolean | DeclarationOptions
     // typeDefinitionProvider?: boolean | TypeDefinitionOptions
@@ -396,3 +396,73 @@ pub const ReferenceParams = struct {
 const ReferenceContext = struct { includeDeclaration: bool };
 
 pub const ReferenceResult = []Location;
+
+pub const CompletionOptions = struct {
+    triggerCharacters: ?[]const String = null,
+    // allCommitCharacters?: string[];
+    resolveProvider: ?bool,
+    // completionItem?: ServerCompletionItemOptions;
+};
+
+pub const CompletionParams = struct {
+    textDocument: TextDocumentIdentifier,
+    position: Position,
+    context: ?CompletionContext = null,
+    // partialResultToken: ?ProgressToken;
+    // workDoneToken: ?ProgressToken,
+};
+
+pub const CompletionResult = []CompletionItem;
+
+pub const CompletionItem = struct {
+    label: String,
+    kind: ?CompletionItemKind = null,
+    detail: ?String = null,
+    documentation: ?MarkupContent = null, //?String
+    // sortText: ?String = null,
+    // filterText: ?String = null,
+    // labelDetails: ?CompletionItemLabelDetails = null ,
+    // tags?: CompletionItemTag[];
+    // preselect:? bool,
+    // insertText: ?String = null,
+    // insertTextFormat: ?InsertTextFormat ,
+    // insertTextMode: ?InsertTextMode,
+    // textEdit?: TextEdit | InsertReplaceEdit;
+    // textEditText?: string;
+    // additionalTextEdits?: TextEdit[];
+    // commitCharacters:? String[],
+    // command?: Command;
+    // data?: LSPAny;
+};
+
+const CompletionContext = struct {
+    triggerKind: CompletionTriggerKind,
+    triggerCharacter: ?String = null,
+};
+
+pub const CompletionTriggerKind = enum(u8) {
+    invoked = 1,
+    triggerCharacter = 2,
+    triggerForIncompleteCompletions = 3,
+
+    pub fn jsonStringify(self: @This(), stream: anytype) !void {
+        try stream.write(@intFromEnum(self));
+    }
+};
+
+pub const CompletionItemKind = enum(u8) {
+    text = 1,
+    function = 3,
+    variable = 6,
+    unit = 11,
+    value = 12,
+    keyword = 14,
+    snippet = 15,
+    color = 16,
+    file = 17,
+    folder = 19,
+
+    pub fn jsonStringify(self: @This(), stream: anytype) !void {
+        try stream.write(@intFromEnum(self));
+    }
+};

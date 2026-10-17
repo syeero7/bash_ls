@@ -46,6 +46,10 @@ pub fn initialize(
             .hoverProvider = true,
             .definitionProvider = true,
             .referencesProvider = true,
+            .completionProvider = .{
+                .triggerCharacters = &.{"$"},
+                .resolveProvider = false,
+            },
         },
         .serverInfo = .{
             .name = "bash_ls",
@@ -250,6 +254,67 @@ pub fn @"textDocument/hover"(
         node_text,
     });
     return hover;
+}
+
+pub fn @"textDocument/completion"(
+    self: *@This(),
+    _: Allocator,
+    arena: Allocator,
+    params: types.CompletionParams,
+) !?types.CompletionResult {
+    const document = self.documents.get(params.textDocument.uri) orelse return null;
+    const tree = self.parser.parseString(document, null) orelse return null;
+    defer tree.destroy();
+
+    const root_node = tree.rootNode();
+    const current_node = ts_bash.getCurrentNode(root_node, params.position) orelse return null;
+    if (ts_bash.isComment(current_node.kind())) return null;
+
+    var completions: std.ArrayList(types.CompletionItem) = .empty;
+    errdefer completions.deinit(arena);
+
+    // TODO: if params.context.?.triggerKind == .triggerCharacter send all variables above node
+    // TODO: include functions above this code
+    //  maybe implement completionItem/resolve
+
+    if (self.commands) |commands| {
+        var cmd_iterator = commands.iterator();
+        while (cmd_iterator.next()) |entry| {
+            const command = entry.key_ptr.*;
+            if (ts_bash.isReservedWord(command)) {
+                try completions.append(arena, .{
+                    .label = command,
+                    .kind = .keyword,
+                    .detail = "reserved keyword",
+                    .documentation = .{
+                        .kind = .plaintext,
+                        .value = entry.value_ptr.*,
+                    },
+                });
+                continue;
+            }
+
+            try completions.append(arena, .{
+                .label = command,
+                .kind = .function,
+                .detail = "command",
+                .documentation = .{
+                    .kind = .plaintext,
+                    .value = entry.value_ptr.*,
+                },
+            });
+        }
+    }
+
+    for (ts_bash.keywords) |word| {
+        if (self.commands != null and self.commands.?.get(word) != null) continue;
+        try completions.append(arena, .{
+            .label = word,
+            .kind = .keyword,
+        });
+    }
+
+    return try completions.toOwnedSlice(arena);
 }
 
 pub fn init(

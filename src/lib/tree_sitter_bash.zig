@@ -96,6 +96,10 @@ pub fn isFunctionDefinition(node_kind: []const u8) bool {
     return mem.eql(u8, node_kind, "function_definition");
 }
 
+pub fn isComment(node_kind: []const u8) bool {
+    return mem.eql(u8, node_kind, "comment");
+}
+
 pub fn getFunctionDefinitionText(
     allocator: mem.Allocator,
     root_node: ts.Node,
@@ -120,13 +124,15 @@ pub fn getFunctionDefinitionText(
 }
 
 // source: https://www.gnu.org/software/bash/manual/bash.html#Reserved-Words-1
+pub const keywords = [_][]const u8{
+    "if",   "then", "elif",   "else",   "fi",       "time",
+    "for",  "in",   "until",  "while",  "do",       "done",
+    "case", "esac", "coproc", "select", "function", "{",
+    "}",    "[[",   "]]",     "!",
+};
+
 pub fn isReservedWord(node_text: []const u8) bool {
-    inline for ([_][]const u8{
-        "if",   "then", "elif",   "else",   "fi",       "time",
-        "for",  "in",   "until",  "while",  "do",       "done",
-        "case", "esac", "coproc", "select", "function", "{",
-        "}",    "[[",   "]]",     "!",
-    }) |word| {
+    inline for (keywords) |word| {
         if (std.mem.eql(u8, word, node_text)) return true;
     }
 

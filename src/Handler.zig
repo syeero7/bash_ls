@@ -275,7 +275,7 @@ pub fn @"textDocument/completion"(
 
     // TODO: if params.context.?.triggerKind == .triggerCharacter send all variables above node
     // TODO: include functions above this code
-    //  maybe implement completionItem/resolve
+    //  implement completionItem/resolve ??
 
     if (self.commands) |commands| {
         var cmd_iterator = commands.iterator();

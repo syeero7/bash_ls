@@ -94,7 +94,6 @@ pub fn @"textDocument/didOpen"(
     params: types.DidOpenTextDocumentParams,
 ) !void {
     const text_document = params.textDocument;
-    std.log.debug("file opened. uri {s}", .{text_document.uri});
     const text = try gpa.dupe(u8, text_document.text);
     errdefer gpa.free(text);
 

@@ -141,11 +141,11 @@ pub fn start(
                     },
                     else => comptime unreachable,
                 }
+                continue :server_loop;
             }
-        } else {
-            // TODO: err response ?
-            std.log.debug("not implemented method: {s}\n", .{message.method});
         }
+        // TODO: err response ?
+        std.log.debug("not implemented method: {s}\n", .{message.method});
     }
 }
 

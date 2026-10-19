@@ -30,7 +30,10 @@ pub fn start(
         const parsed_message = jsonrpc.parseMessage(reader, arena) catch |err| {
             if (err == error.EndOfStream) return err;
             std.log.debug("message parsing failed. err: {any}\n", .{err});
-            try jsonrpc.sendParseErrorResponse(writer, arena, null);
+            try jsonrpc.sendErrorResponse(writer, arena, .{ .@"error" = .{
+                .code = .parse_error,
+                .message = @errorName(err),
+            } });
             continue;
         };
 
@@ -81,7 +84,13 @@ pub fn start(
                         parsed_params = jsonrpc.parseParams(arena, Params, message.params.?) catch |err| {
                             if (err == error.EndOfStream) return err;
                             std.log.debug("{s} param parsing failed. err: {any}\n", .{ message.method, err });
-                            try jsonrpc.sendParseErrorResponse(writer, arena, null);
+                            try jsonrpc.sendErrorResponse(writer, arena, .{
+                                .id = message.id,
+                                .@"error" = .{
+                                    .code = .parse_error,
+                                    .message = @errorName(err),
+                                },
+                            });
                             continue :server_loop;
                         };
 
@@ -100,7 +109,7 @@ pub fn start(
                         try jsonrpc.sendResultResponse(writer, arena, struct {}, .{
                             .id = message.id,
                             .result = null,
-                        });
+                        }, .{ .emit_null_optional_fields = true });
                     },
                     .error_union => |err_union| {
                         const payload_type = comptime @typeInfo(err_union.payload);
@@ -121,12 +130,13 @@ pub fn start(
                                 try jsonrpc.sendResultResponse(writer, arena, err_union.payload, .{
                                     .id = message.id,
                                     .result = result,
-                                });
+                                }, .{ .emit_null_optional_fields = false });
                             },
 
                             .void => {
                                 @call(.auto, method_func, func_args) catch |err| {
                                     if (comptime std.mem.eql(u8, func.name, "exit")) {
+                                        std.log.debug("exit with: {any}", .{err});
                                         switch (err) {
                                             error.ExitServer => return,
                                             error.ExitWithoutShutdown => return err,

@@ -18,63 +18,50 @@ pub fn parseParams(allocator: Allocator, comptime T: type, value: json.Value) !j
     });
 }
 
-pub fn sendErrorResponse(writer: *Io.Writer, allocator: Allocator, err: types.ResponseError) !void {
-    const msg = try encodeJsonRpc(allocator, err);
-    defer allocator.free(msg);
-    try writer.writeAll(msg);
-    try writer.flush();
+pub fn sendErrorResponse(writer: *Io.Writer, arena: Allocator, err: types.ResponseError) !void {
+    try writeResponse(writer, arena, err, .{});
 }
 
 pub fn sendResultResponse(
     writer: *Io.Writer,
-    allocator: Allocator,
+    arena: Allocator,
     comptime T: type,
     result: types.ResponseResult(T),
+    options: json.Stringify.Options,
 ) !void {
-    const msg = try encodeJsonRpc(allocator, result);
-    defer allocator.free(msg);
-    try writer.writeAll(msg);
-    try writer.flush();
+    try writeResponse(writer, arena, result, options);
 }
 
-pub fn sendNotification(writer: *Io.Writer, allocator: Allocator, notification: types.Notification) !void {
-    const msg = try encodeJsonRpc(allocator, notification);
-    defer allocator.free(msg);
+pub fn writeResponse(
+    writer: *Io.Writer,
+    arena: Allocator,
+    data: anytype,
+    options: json.Stringify.Options,
+) !void {
+    const msg = try encodeJsonRpc(arena, data, options);
     try writer.writeAll(msg);
     try writer.flush();
-}
-
-pub fn sendParseErrorResponse(writer: *Io.Writer, allocator: Allocator, id: ?types.ID) !void {
-    try sendErrorResponse(writer, allocator, .{
-        .id = id,
-        .@"error" = .{
-            .code = .parse_error,
-            .message = "failed to parse the message",
-        },
-    });
 }
 
 const field_separator = "\r\n\r\n";
 const header_field_name = "Content-Length: ";
 
-pub fn encodeJsonRpc(allocator: Allocator, json_struct: anytype) ![]u8 {
-    const content = try json.Stringify.valueAlloc(allocator, json_struct, .{});
+pub fn encodeJsonRpc(arena: Allocator, json_struct: anytype, options: json.Stringify.Options) ![]u8 {
+    const content = try json.Stringify.valueAlloc(arena, json_struct, options);
     std.log.debug("json string: {s}", .{content});
-    defer allocator.free(content);
     const fmt = header_field_name ++ "{d}" ++ field_separator ++ "{s}";
-    return std.fmt.allocPrint(allocator, fmt, .{ content.len, content });
+    return std.fmt.allocPrint(arena, fmt, .{ content.len, content });
 }
 
-fn decodeJsonRpc(comptime T: type, reader: *std.Io.Reader, allocator: Allocator) !json.Parsed(T) {
-    const content = try getJsonContent(reader, allocator);
-    defer allocator.free(content);
-    return try json.parseFromSlice(T, allocator, content, .{
+fn decodeJsonRpc(comptime T: type, reader: *std.Io.Reader, arena: Allocator) !json.Parsed(T) {
+    const content = try getJsonContent(reader, arena);
+    return try json.parseFromSlice(T, arena, content, .{
         .ignore_unknown_fields = true,
         .allocate = .alloc_always,
     });
 }
 
-fn getJsonContent(reader: *std.Io.Reader, allocator: Allocator) ![]u8 {
+fn getJsonContent(reader: *std.Io.Reader, arena: Allocator) ![]u8 {
     const line = try reader.takeDelimiterInclusive('\n');
     if (!std.mem.endsWith(u8, line, field_separator[0..2])) return error.SeparatorNotFound;
     const separator_rest = try reader.takeArray(2);
@@ -82,7 +69,7 @@ fn getJsonContent(reader: *std.Io.Reader, allocator: Allocator) ![]u8 {
 
     if (std.mem.cut(u8, line[0..(line.len - 2)], header_field_name)) |parts| {
         const content_length = try std.fmt.parseInt(usize, parts.@"1", 10);
-        const content = try reader.readAlloc(allocator, content_length);
+        const content = try reader.readAlloc(arena, content_length);
         std.log.debug("content: {s}", .{content});
         return content;
     }
@@ -91,16 +78,21 @@ fn getJsonContent(reader: *std.Io.Reader, allocator: Allocator) ![]u8 {
 }
 
 test "encode json-rpc" {
-    const allocator = testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    const allocator = arena.allocator();
+    defer arena.deinit();
+
     const msg = struct { @"test": bool = true }{};
-    const result = try encodeJsonRpc(allocator, msg);
-    defer allocator.free(result);
+    const result = try encodeJsonRpc(allocator, msg, .{});
 
     try testing.expectEqualStrings(result, header_field_name ++ "13" ++ field_separator ++ "{\"test\":true}");
 }
 
 test "decode json-rpc" {
-    const allocator = testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    const allocator = arena.allocator();
+    defer arena.deinit();
+
     var test_reader = std.Io.Reader.fixed(header_field_name ++ "13" ++ field_separator ++ "{\"test\":true}");
     const test_struct = struct { @"test": bool = true };
     const result = try decodeJsonRpc(test_struct, &test_reader, allocator);

@@ -189,6 +189,52 @@ pub fn getMatchingNodeRanges(
     return try ranges.toOwnedSlice(allocator);
 }
 
+pub fn getFunctionDefinitions(
+    allocator: mem.Allocator,
+    root_node: ts.Node,
+    document: []const u8,
+) ![][]const u8 {
+    var cursor = root_node.walk();
+    var should_visit_child_nodes = true;
+
+    var func_names: std.ArrayList([]const u8) = .empty;
+    errdefer func_names.deinit(allocator);
+
+    while (true) {
+        if (should_visit_child_nodes) {
+            found_match: {
+                const current_node = cursor.node();
+                if (current_node.startByte() >= document.len) break;
+                if (!isFunctionDefinition(current_node.kind())) break :found_match;
+                const func_node = current_node.namedChild(0) orelse break;
+                std.debug.assert(isFunction(func_node.kind()));
+
+                const node_range = getNodeRange(func_node, document.len) orelse break;
+                try func_names.append(allocator, document[node_range.start..node_range.end]);
+            }
+
+            if (cursor.gotoFirstChild()) {
+                should_visit_child_nodes = true;
+                continue;
+            }
+        }
+
+        if (cursor.gotoNextSibling()) {
+            should_visit_child_nodes = true;
+            continue;
+        }
+
+        if (cursor.gotoParent()) {
+            should_visit_child_nodes = false;
+            continue;
+        }
+
+        break;
+    }
+
+    return try func_names.toOwnedSlice(allocator);
+}
+
 ///  <command> [-fF] <func>
 fn isBuiltinTakesFunc(command_text: []const u8) bool {
     inline for ([_][]const u8{ "unset", "export", "readonly", "typeset", "declare" }) |cmd| {

@@ -266,14 +266,10 @@ pub fn @"textDocument/completion"(
     defer tree.destroy();
 
     const root_node = tree.rootNode();
-    const current_node = ts_bash.getCurrentNode(root_node, params.position) orelse return null;
-    if (ts_bash.isComment(current_node.kind())) return null;
-
     var completions: std.ArrayList(types.CompletionItem) = .empty;
     errdefer completions.deinit(arena);
 
     // TODO: if params.context.?.triggerKind == .triggerCharacter send all variables above node
-    // TODO: include functions above this code
     //  implement completionItem/resolve ??
 
     if (self.commands) |commands| {
@@ -310,6 +306,16 @@ pub fn @"textDocument/completion"(
         try completions.append(arena, .{
             .label = word,
             .kind = .keyword,
+        });
+    }
+
+    const cursor_index = offsets.positionToIndex(document, params.position, .@"utf-8");
+    const func_definitions = try ts_bash.getFunctionDefinitions(arena, root_node, document[0..cursor_index]);
+    for (func_definitions) |func_name| {
+        try completions.append(arena, .{
+            .label = func_name,
+            .kind = .function,
+            .detail = "function",
         });
     }
 

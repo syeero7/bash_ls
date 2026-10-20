@@ -246,7 +246,25 @@ pub fn @"textDocument/hover"(
     }
 
     const node_kind = current_node.kind();
-    // TODO: for variables show recently assigned value
+    if (ts_bash.isVariable(node_kind)) {
+        var_text: {
+            var value_text = try ts_bash.getVariableText(
+                arena,
+                root_node,
+                document[0..current_node.startByte()],
+                node_text,
+            );
+            if (value_text == null) {
+                const parent_node = current_node.parent() orelse break :var_text;
+                if (!ts_bash.isVariableAssignment(parent_node.kind())) break :var_text;
+                const parent_range = ts_bash.getNodeRange(parent_node, document.len) orelse break :var_text;
+                value_text = document[parent_range.start..parent_range.end];
+            }
+
+            hover.contents.value = try std.fmt.allocPrint(arena, "```bash\n{s}\n```", .{value_text.?});
+            return hover;
+        }
+    }
 
     hover.contents.value = try std.fmt.allocPrint(arena, "**{s}**\n```bash\n{s}\n```", .{
         node_kind,

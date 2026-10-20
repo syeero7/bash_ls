@@ -286,6 +286,61 @@ pub fn getVariables(
     return variables;
 }
 
+pub fn getVariableText(
+    allocator: mem.Allocator,
+    root_node: ts.Node,
+    document: []const u8,
+    node_text: []const u8,
+) !?[]const u8 {
+    var cursor = root_node.walk();
+    var should_visit_child_nodes = true;
+    var index_list: std.ArrayList(u32) = .empty;
+    errdefer index_list.deinit(allocator);
+
+    while (true) {
+        if (should_visit_child_nodes) {
+            found_match: {
+                const current_node = cursor.node();
+                if (current_node.startByte() > document.len) break;
+                if (!isVariableAssignment(current_node.kind())) break :found_match;
+
+                const var_node = current_node.namedChild(0) orelse break;
+                std.debug.assert(isVariable(var_node.kind()));
+                const node_range = getNodeRange(var_node, document.len) orelse break;
+                const variable_name = document[node_range.start..node_range.end];
+                if (!mem.eql(u8, node_text, variable_name)) break :found_match;
+
+                try index_list.append(allocator, cursor.descendantIndex());
+            }
+
+            if (cursor.gotoFirstChild()) {
+                should_visit_child_nodes = true;
+                continue;
+            }
+        }
+
+        if (cursor.gotoNextSibling()) {
+            should_visit_child_nodes = true;
+            continue;
+        }
+
+        if (cursor.gotoParent()) {
+            should_visit_child_nodes = false;
+            continue;
+        }
+
+        break;
+    }
+
+    const items = try index_list.toOwnedSlice(allocator);
+    if (items.len == 0) return null;
+    cursor.gotoDescendant(items[items.len - 1]);
+    const variable_node = cursor.node();
+    std.debug.assert(isVariableAssignment(variable_node.kind()));
+    const node_range = getNodeRange(variable_node, document.len) orelse return null;
+    return document[node_range.start..node_range.end];
+}
+
 ///  <command> [-fF] <func>
 fn isBuiltinTakesFunc(command_text: []const u8) bool {
     inline for ([_][]const u8{ "unset", "export", "readonly", "typeset", "declare" }) |cmd| {

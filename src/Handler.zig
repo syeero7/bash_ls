@@ -269,8 +269,37 @@ pub fn @"textDocument/completion"(
     var completions: std.ArrayList(types.CompletionItem) = .empty;
     errdefer completions.deinit(arena);
 
-    // TODO: if params.context.?.triggerKind == .triggerCharacter send all variables above node
-    //  implement completionItem/resolve ??
+    const cursor_index = offsets.positionToIndex(document, params.position, .@"utf-8");
+    var variables = try ts_bash.getVariables(arena, root_node, document[0..cursor_index]);
+    var var_iterator = variables.keyIterator();
+    defer variables.deinit();
+
+    while (var_iterator.next()) |var_name| {
+        try completions.append(arena, .{
+            .label = var_name.*,
+            .kind = .variable,
+            .detail = "variable",
+        });
+    }
+
+    trigger: {
+        const ctx = params.context orelse break :trigger;
+        if (ctx.triggerKind != .triggerCharacter) break :trigger;
+        if (ctx.triggerCharacter) |trigger| {
+            if (trigger.len == 1 and trigger[0] == '$') {
+                return try completions.toOwnedSlice(arena);
+            }
+        }
+    }
+
+    const func_definitions = try ts_bash.getFunctionDefinitions(arena, root_node, document[0..cursor_index]);
+    for (func_definitions) |func_name| {
+        try completions.append(arena, .{
+            .label = func_name,
+            .kind = .function,
+            .detail = "function",
+        });
+    }
 
     if (self.commands) |commands| {
         var cmd_iterator = commands.iterator();
@@ -306,16 +335,6 @@ pub fn @"textDocument/completion"(
         try completions.append(arena, .{
             .label = word,
             .kind = .keyword,
-        });
-    }
-
-    const cursor_index = offsets.positionToIndex(document, params.position, .@"utf-8");
-    const func_definitions = try ts_bash.getFunctionDefinitions(arena, root_node, document[0..cursor_index]);
-    for (func_definitions) |func_name| {
-        try completions.append(arena, .{
-            .label = func_name,
-            .kind = .function,
-            .detail = "function",
         });
     }
 

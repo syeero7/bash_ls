@@ -82,6 +82,10 @@ pub fn isVariable(node_kind: []const u8) bool {
     return mem.eql(u8, node_kind, "variable_name");
 }
 
+pub fn isVariableAssignment(node_kind: []const u8) bool {
+    return mem.eql(u8, node_kind, "variable_assignment");
+}
+
 pub fn isString(node_kind: []const u8) bool {
     inline for ([_][]const u8{
         "string",        "raw_string",     "heredoc_body",
@@ -233,6 +237,53 @@ pub fn getFunctionDefinitions(
     }
 
     return try func_names.toOwnedSlice(allocator);
+}
+
+pub fn getVariables(
+    allocator: mem.Allocator,
+    root_node: ts.Node,
+    document: []const u8,
+) !std.StringHashMap(void) {
+    var cursor = root_node.walk();
+    var should_visit_child_nodes = true;
+    var variables: std.StringHashMap(void) = .init(allocator);
+    errdefer variables.deinit();
+
+    while (true) {
+        if (should_visit_child_nodes) {
+            found_match: {
+                const current_node = cursor.node();
+                if (current_node.startByte() >= document.len) break;
+                if (!isVariableAssignment(current_node.kind())) break :found_match;
+                const var_node = current_node.namedChild(0) orelse break;
+                std.debug.assert(isVariable(var_node.kind()));
+
+                const node_range = getNodeRange(var_node, document.len) orelse break;
+                const variable_name = document[node_range.start..node_range.end];
+                if (variables.get(variable_name) != null) break :found_match;
+                try variables.put(variable_name, {});
+            }
+
+            if (cursor.gotoFirstChild()) {
+                should_visit_child_nodes = true;
+                continue;
+            }
+        }
+
+        if (cursor.gotoNextSibling()) {
+            should_visit_child_nodes = true;
+            continue;
+        }
+
+        if (cursor.gotoParent()) {
+            should_visit_child_nodes = false;
+            continue;
+        }
+
+        break;
+    }
+
+    return variables;
 }
 
 ///  <command> [-fF] <func>

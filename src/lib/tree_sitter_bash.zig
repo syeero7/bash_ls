@@ -7,6 +7,33 @@ const testing = std.testing;
 
 extern fn tree_sitter_bash() callconv(.c) *ts.Language;
 
+const NodeIterator = struct {
+    cursor: ts.TreeCursor = undefined,
+    should_visit_child_nodes: bool = true,
+
+    fn init(root_node: ts.Node) @This() {
+        return .{ .cursor = root_node.walk() };
+    }
+
+    pub fn next(self: *@This()) ?ts.Node {
+        if (self.should_visit_child_nodes and self.cursor.gotoFirstChild()) {
+            return self.cursor.node();
+        }
+
+        if (self.cursor.gotoNextSibling()) {
+            self.should_visit_child_nodes = true;
+            return self.cursor.node();
+        }
+
+        if (self.cursor.gotoParent()) {
+            self.should_visit_child_nodes = false;
+            return self.next();
+        }
+
+        return null;
+    }
+};
+
 const NodeRange = struct {
     start: u32,
     end: u32,
@@ -149,45 +176,22 @@ pub fn getMatchingNodeRanges(
     document: []const u8,
     opt: FindNodeOptions,
 ) ![]types.Range {
-    var cursor = root_node.walk();
-    var should_visit_child_nodes = true;
-    var found_first_match = false;
-
     const only_first_capture = opt.capture == .only_first;
     var ranges: std.ArrayList(types.Range) = if (only_first_capture) try .initCapacity(allocator, 1) else .empty;
     errdefer ranges.deinit(allocator);
 
-    while (true) {
-        if (should_visit_child_nodes) {
-            found_match: {
-                const current_node = cursor.node();
-                if (!isNodeMatch(current_node, document, opt)) break :found_match;
-                if (!found_first_match) {
-                    found_first_match = true;
-                    if (opt.capture == .exclude_first) break :found_match;
-                }
+    var iterator = NodeIterator.init(root_node);
+    var found_first_match = false;
 
-                try ranges.append(allocator, toLspRange(current_node.range()));
-                if (only_first_capture) return try ranges.toOwnedSlice(allocator);
-            }
-
-            if (cursor.gotoFirstChild()) {
-                should_visit_child_nodes = true;
-                continue;
-            }
+    while (iterator.next()) |node| {
+        if (!isNodeMatch(node, document, opt)) continue;
+        if (!found_first_match) {
+            found_first_match = true;
+            if (opt.capture == .exclude_first) continue;
         }
 
-        if (cursor.gotoNextSibling()) {
-            should_visit_child_nodes = true;
-            continue;
-        }
-
-        if (cursor.gotoParent()) {
-            should_visit_child_nodes = false;
-            continue;
-        }
-
-        break;
+        try ranges.append(allocator, toLspRange(node.range()));
+        if (only_first_capture) break;
     }
 
     return try ranges.toOwnedSlice(allocator);
@@ -198,42 +202,18 @@ pub fn getFunctionDefinitions(
     root_node: ts.Node,
     document: []const u8,
 ) ![][]const u8 {
-    var cursor = root_node.walk();
-    var should_visit_child_nodes = true;
-
+    var iterator = NodeIterator.init(root_node);
     var func_names: std.ArrayList([]const u8) = .empty;
     errdefer func_names.deinit(allocator);
 
-    while (true) {
-        if (should_visit_child_nodes) {
-            found_match: {
-                const current_node = cursor.node();
-                if (current_node.startByte() >= document.len) break;
-                if (!isFunctionDefinition(current_node.kind())) break :found_match;
-                const func_node = current_node.namedChild(0) orelse break;
-                std.debug.assert(isFunction(func_node.kind()));
+    while (iterator.next()) |node| {
+        if (node.startByte() >= document.len) break;
+        if (!isFunctionDefinition(node.kind())) continue;
 
-                const node_range = getNodeRange(func_node, document.len) orelse break;
-                try func_names.append(allocator, document[node_range.start..node_range.end]);
-            }
-
-            if (cursor.gotoFirstChild()) {
-                should_visit_child_nodes = true;
-                continue;
-            }
-        }
-
-        if (cursor.gotoNextSibling()) {
-            should_visit_child_nodes = true;
-            continue;
-        }
-
-        if (cursor.gotoParent()) {
-            should_visit_child_nodes = false;
-            continue;
-        }
-
-        break;
+        const func_node = node.namedChild(0) orelse break;
+        std.debug.assert(isFunction(func_node.kind()));
+        const node_range = getNodeRange(func_node, document.len) orelse break;
+        try func_names.append(allocator, document[node_range.start..node_range.end]);
     }
 
     return try func_names.toOwnedSlice(allocator);
@@ -244,43 +224,21 @@ pub fn getVariables(
     root_node: ts.Node,
     document: []const u8,
 ) !std.StringHashMap(void) {
-    var cursor = root_node.walk();
-    var should_visit_child_nodes = true;
+    var iterator = NodeIterator.init(root_node);
     var variables: std.StringHashMap(void) = .init(allocator);
     errdefer variables.deinit();
 
-    while (true) {
-        if (should_visit_child_nodes) {
-            found_match: {
-                const current_node = cursor.node();
-                if (current_node.startByte() >= document.len) break;
-                if (!isVariableAssignment(current_node.kind())) break :found_match;
-                const var_node = current_node.namedChild(0) orelse break;
-                std.debug.assert(isVariable(var_node.kind()));
+    while (iterator.next()) |node| {
+        if (node.startByte() >= document.len) break;
+        if (!isVariableAssignment(node.kind())) continue;
 
-                const node_range = getNodeRange(var_node, document.len) orelse break;
-                const variable_name = document[node_range.start..node_range.end];
-                if (variables.get(variable_name) != null) break :found_match;
-                try variables.put(variable_name, {});
-            }
+        const var_node = node.namedChild(0) orelse break;
+        std.debug.assert(isVariable(var_node.kind()));
+        const node_range = getNodeRange(var_node, document.len) orelse break;
 
-            if (cursor.gotoFirstChild()) {
-                should_visit_child_nodes = true;
-                continue;
-            }
-        }
-
-        if (cursor.gotoNextSibling()) {
-            should_visit_child_nodes = true;
-            continue;
-        }
-
-        if (cursor.gotoParent()) {
-            should_visit_child_nodes = false;
-            continue;
-        }
-
-        break;
+        const variable_name = document[node_range.start..node_range.end];
+        if (variables.get(variable_name) != null) continue;
+        try variables.put(variable_name, {});
     }
 
     return variables;
@@ -292,50 +250,28 @@ pub fn getVariableText(
     document: []const u8,
     node_text: []const u8,
 ) !?[]const u8 {
-    var cursor = root_node.walk();
-    var should_visit_child_nodes = true;
+    var iterator = NodeIterator.init(root_node);
     var index_list: std.ArrayList(u32) = .empty;
     errdefer index_list.deinit(allocator);
 
-    while (true) {
-        if (should_visit_child_nodes) {
-            found_match: {
-                const current_node = cursor.node();
-                if (current_node.startByte() > document.len) break;
-                if (!isVariableAssignment(current_node.kind())) break :found_match;
+    while (iterator.next()) |node| {
+        if (node.startByte() > document.len) break;
+        if (!isVariableAssignment(node.kind())) continue;
 
-                const var_node = current_node.namedChild(0) orelse break;
-                std.debug.assert(isVariable(var_node.kind()));
-                const node_range = getNodeRange(var_node, document.len) orelse break;
-                const variable_name = document[node_range.start..node_range.end];
-                if (!mem.eql(u8, node_text, variable_name)) break :found_match;
+        const var_node = node.namedChild(0) orelse break;
+        std.debug.assert(isVariable(var_node.kind()));
+        const node_range = getNodeRange(var_node, document.len) orelse break;
+        const variable_name = document[node_range.start..node_range.end];
+        if (!mem.eql(u8, node_text, variable_name)) continue;
 
-                try index_list.append(allocator, cursor.descendantIndex());
-            }
-
-            if (cursor.gotoFirstChild()) {
-                should_visit_child_nodes = true;
-                continue;
-            }
-        }
-
-        if (cursor.gotoNextSibling()) {
-            should_visit_child_nodes = true;
-            continue;
-        }
-
-        if (cursor.gotoParent()) {
-            should_visit_child_nodes = false;
-            continue;
-        }
-
-        break;
+        try index_list.append(allocator, iterator.cursor.descendantIndex());
     }
 
     const items = try index_list.toOwnedSlice(allocator);
     if (items.len == 0) return null;
-    cursor.gotoDescendant(items[items.len - 1]);
-    const variable_node = cursor.node();
+    iterator.cursor.gotoDescendant(items[items.len - 1]);
+    const variable_node = iterator.cursor.node();
+
     std.debug.assert(isVariableAssignment(variable_node.kind()));
     const node_range = getNodeRange(variable_node, document.len) orelse return null;
     return document[node_range.start..node_range.end];

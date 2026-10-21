@@ -27,7 +27,7 @@ chmod +x ./extract_help.bash
 
 # run the script
 ./extract_help.bash <output_path>
-# default output path is current directory
+# default output path is ./command_help.jsonl
 ```
 
 ### Neovim

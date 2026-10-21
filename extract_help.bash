@@ -6,20 +6,29 @@ if ! command -v jq &>/dev/null; then
   exit 1
 fi
 
-export OUTPUT="$(mktemp -d)/output.jsonl"
-touch "$OUTPUT"
+OUTPUT="${1:-"command_help.jsonl"}"
+BUILTINS="$(compgen -b | tr '\n' ' ')"
+
+# <command> [ -h, --help, help ]
+APPEND_HELP_COMMANDS="git awk xargs cat sleep find grep tar cut"
+
+# help <command>
+PREPEND_HELP_COMMANDS="$BUILTINS for while select time"
+
+export TEMP_OUTPUT="$(mktemp -d)/output.jsonl"
+touch "$TEMP_OUTPUT"
 
 append_to_output() {
   local cmd="$1"
   local output="$2"
 
   if [ -n "$output" ]; then
-    jq -nc --arg c "$cmd" --arg o "$output" '{$c:$o}' >>"$OUTPUT"
+    jq -nc --arg c "$cmd" --arg o "$output" '{$c:$o}' >>"$TEMP_OUTPUT"
   fi
 
 }
 
-extract_append_help() {
+append_help_extract() {
   local cmd="$1"
   local cmd_output
   local help_args=(--help -h help)
@@ -32,7 +41,7 @@ extract_append_help() {
   append_to_output "$cmd" "$cmd_output"
 }
 
-extract_prepend_help() {
+prepend_help_extract() {
   local cmd="$1"
   local cmd_output
 
@@ -41,15 +50,10 @@ extract_prepend_help() {
 }
 
 export -f append_to_output
-export -f extract_append_help
-export -f extract_prepend_help
+export -f append_help_extract
+export -f prepend_help_extract
 
-BUILTINS=" $(compgen -b | tr '\n' ' ') "
+printf '%s\n' $PREPEND_HELP_COMMANDS | xargs -I {} -P 0 bash -c 'prepend_help_extract "{}"'
+printf '%s\n' $APPEND_HELP_COMMANDS | xargs -I {} -P 0 bash -c 'append_help_extract "{}"'
 
-append_help_commands=" git awk xargs cat sleep find grep tar "
-prepend_help_commands="$BUILTINS for while select time "
-
-printf '%s\n' $prepend_help_commands | xargs -I {} -P 0 bash -c 'extract_prepend_help "{}"'
-printf '%s\n' $append_help_commands | xargs -I {} -P 0 bash -c 'extract_append_help "{}"'
-
-echo $OUTPUT
+mv "$TEMP_OUTPUT" "$OUTPUT"

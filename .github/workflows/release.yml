@@ -47,13 +47,10 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
-      - run: ls -lhR
+      - run: ls -lhR ./artifacts/*
 
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "v${{ inputs.version }}" \ 
-          --generate-notes \
-          --verify-tag \
-          ./artifacts/*
+          gh release create "v${{ inputs.version }}" --generate-notes --verify-tag ./artifacts/*

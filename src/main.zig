@@ -4,6 +4,7 @@ const server = @import("lsp/server.zig");
 const ts_bash = @import("lib/tree_sitter_bash.zig");
 const bash_commands = @import("lib/commands.zig");
 const Handler = @import("Handler.zig");
+const Logger = @import("lib/Logger.zig");
 
 pub const std_options: std.Options = .{
     .log_level = .debug,
@@ -11,7 +12,7 @@ pub const std_options: std.Options = .{
     .logFn = logFn,
 };
 
-var log_file: ?std.Io.File = null;
+var logger = Logger.init();
 
 fn logFn(
     comptime level: std.log.Level,
@@ -19,40 +20,13 @@ fn logFn(
     comptime fmt: []const u8,
     args: anytype,
 ) void {
-    _ = scope;
-    const io = std.Options.debug_io;
-    const prev = io.swapCancelProtection(.blocked);
-    defer _ = io.swapCancelProtection(prev);
-    var buffer: [1024 * 8]u8 = undefined;
-    var writer = std.Io.Writer.fixed(&buffer);
-
-    writer.print("[bash_ls] {s}: ", .{level.asText()}) catch {};
-    writer.print(fmt, args) catch {};
-    writer.writeByte('\n') catch {};
-
-    if (log_file) |file| {
-        const is_locked = if (file.lock(io, .exclusive)) |_| true else |_| false;
-        defer if (is_locked) file.unlock(io);
-        if (file.length(io)) |length| {
-            file.writePositionalAll(io, writer.buffered(), length) catch {};
-        } else |_| {
-            file.writeStreamingAll(io, writer.buffered()) catch {};
-        }
-    }
-}
-
-fn createLogFile(io: std.Io, log_file_path: []const u8) !?std.Io.File {
-    const file = std.Io.Dir.cwd().createFile(io, log_file_path, .{ .truncate = false }) catch |err| switch (err) {
-        error.Canceled => return error.Canceled,
-        else => return null,
-    };
-    errdefer file.close(io);
-    return file;
+    logger.log(level, scope, fmt, args);
 }
 
 pub fn main(init: std.process.Init) !void {
     const io = init.io;
     var commands: ?bash_commands.CommandHelp = null;
+    defer logger.deinit(io);
 
     {
         var arg_iterator = try init.minimal.args.iterateAllocator(init.gpa);
@@ -61,7 +35,7 @@ pub fn main(init: std.process.Init) !void {
         while (arg_iterator.next()) |arg| {
             if (std.mem.eql(u8, arg, "--log-file")) {
                 if (arg_iterator.next()) |log_file_path| {
-                    log_file = try createLogFile(io, log_file_path);
+                    logger.setLogFile(io, log_file_path);
                     continue;
                 }
             }
@@ -74,11 +48,6 @@ pub fn main(init: std.process.Init) !void {
             }
         }
     }
-
-    defer if (log_file) |file| {
-        file.close(io);
-        log_file = null;
-    };
 
     var stdin_buffer: [1024 * 4]u8 = undefined;
     var stdin_reader = std.Io.File.stdin().reader(io, &stdin_buffer);

@@ -361,8 +361,7 @@ pub const HoverParams = struct {
 
 pub const Hover = struct {
     contents: MarkupContent,
-    // FIXME: omit range if null
-    // range: ?Range = null,
+    range: ?Range = null,
 };
 
 pub const MarkupContent = struct {

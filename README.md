@@ -47,3 +47,25 @@ chmod +x ./extract_help.bash
 
     vim.lsp.enable("bash_ls")
 ```
+
+## Build from Source
+
+Install [Zig](https://ziglang.org/intro/getting-started/) v0.16
+
+```bash
+# clone the repository
+git clone https://github.com/syeero7/bash_ls
+cd bash_ls
+
+# native build
+zig build -Doptimize=ReleaseFast
+
+# build for multiple targets. check build.zig
+zig build -Doptimize=ReleaseFast -Dmulti-targets=true
+```
+
+### Run Tests
+
+```bash
+zig build test --summary all
+```

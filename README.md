@@ -61,7 +61,7 @@ cd bash_ls
 zig build -Doptimize=ReleaseFast
 
 # build for multiple targets. check build.zig
-zig build -Doptimize=ReleaseFast -Dmulti-targets=true
+zig build -Doptimize=ReleaseFast -Dmulti-targets
 ```
 
 ### Run Tests

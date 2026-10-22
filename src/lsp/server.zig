@@ -40,30 +40,31 @@ pub fn start(
         defer parsed_message.deinit();
         const message = parsed_message.value;
 
-        if (handler.server_state == .not_initialized and
-            !std.mem.eql(u8, "initialize", message.method) and
-            !std.mem.eql(u8, "initialized", message.method))
-        {
-            try jsonrpc.sendErrorResponse(writer, arena, .{
-                .id = message.id,
-                .@"error" = .{
-                    .code = .server_not_initialized,
-                    .message = "server is not initialized",
-                },
-            });
-            continue;
-        }
-
-        if (handler.server_state == .shutdown and !std.mem.eql(u8, "exit", message.method)) {
-            std.log.debug("invalid request received. method: {s}\n", .{message.method});
-            try jsonrpc.sendErrorResponse(writer, arena, .{
-                .id = message.id,
-                .@"error" = .{
-                    .code = .invalid_request,
-                    .message = "invalid request",
-                },
-            });
-            continue;
+        sw: switch (handler.server_state) {
+            .not_initialized => {
+                if (std.mem.eql(u8, "initialize", message.method) or
+                    std.mem.eql(u8, "initialized", message.method)) break :sw;
+                try jsonrpc.sendErrorResponse(writer, arena, .{
+                    .id = message.id,
+                    .@"error" = .{
+                        .code = .server_not_initialized,
+                        .message = "server is not initialized",
+                    },
+                });
+                continue;
+            },
+            .shutdown => {
+                if (std.mem.eql(u8, "exit", message.method)) break :sw;
+                try jsonrpc.sendErrorResponse(writer, arena, .{
+                    .id = message.id,
+                    .@"error" = .{
+                        .code = .invalid_request,
+                        .message = "invalid request",
+                    },
+                });
+                continue;
+            },
+            .initialized => break :sw,
         }
 
         inline for (@typeInfo(Handler).@"struct".decls) |func| {
@@ -82,7 +83,6 @@ pub fn start(
                 const params = sw: switch (@typeInfo(Params)) {
                     .@"struct" => {
                         parsed_params = jsonrpc.parseParams(arena, Params, message.params.?) catch |err| {
-                            if (err == error.EndOfStream) return err;
                             std.log.debug("{s} param parsing failed. err: {any}\n", .{ message.method, err });
                             try jsonrpc.sendErrorResponse(writer, arena, .{
                                 .id = message.id,
@@ -122,8 +122,15 @@ pub fn start(
                                 }
 
                                 const result = @call(.auto, method_func, func_args) catch |err| {
-                                    // TODO: send error response
+                                    // TODO: could be any other err code
                                     std.log.debug("method {s} failed. err: {any}\n", .{ func.name, err });
+                                    try jsonrpc.sendErrorResponse(writer, arena, .{
+                                        .id = message.id,
+                                        .@"error" = .{
+                                            .code = .internal_error,
+                                            .message = @errorName(err),
+                                        },
+                                    });
                                     continue :server_loop;
                                 };
 
@@ -135,15 +142,20 @@ pub fn start(
 
                             .void => {
                                 @call(.auto, method_func, func_args) catch |err| {
-                                    if (comptime std.mem.eql(u8, func.name, "exit")) {
-                                        std.log.debug("exit with: {any}", .{err});
-                                        switch (err) {
-                                            error.ExitServer => return,
-                                            error.ExitWithoutShutdown => return err,
-                                        }
-                                    }
-                                    // TODO: send error response
+                                    if (comptime std.mem.eql(u8, func.name, "exit")) switch (err) {
+                                        error.ExitServer => return,
+                                        error.ExitWithoutShutdown => return err,
+                                    };
+
+                                    // TODO: could be any other err code
                                     std.log.debug("method {s} failed. err: {any}\n", .{ func.name, err });
+                                    try jsonrpc.sendErrorResponse(writer, arena, .{
+                                        .id = message.id,
+                                        .@"error" = .{
+                                            .code = .internal_error,
+                                            .message = @errorName(err),
+                                        },
+                                    });
                                 };
                             },
                             else => comptime unreachable,
@@ -154,8 +166,15 @@ pub fn start(
                 continue :server_loop;
             }
         }
-        // TODO: err response ?
-        std.log.debug("not implemented method: {s}\n", .{message.method});
+
+        std.log.debug("method: {s} is not implemented\n", .{message.method});
+        try jsonrpc.sendErrorResponse(writer, arena, .{
+            .id = message.id,
+            .@"error" = .{
+                .code = .method_not_found,
+                .message = "method is not implemented",
+            },
+        });
     }
 }
 

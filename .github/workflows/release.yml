@@ -9,15 +9,7 @@ on:
 
 jobs:
   build:
-    name: Build ${{ matrix.target }}
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        include:
-          - target: x86_64-linux
-          # - target: x86_64-windows
-          # - target: x86_64-macos
 
     steps:
       - uses: actions/checkout@v6
@@ -25,12 +17,11 @@ jobs:
         with:
           version: 0.16.0
 
-      - run: zig build -Doptimize=ReleaseFast -Dtarget=${{ matrix.target }}
+      - run: zig build -Doptimize=ReleaseFast -Dmulti-targets=true
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.target }}
           path: zig-out/bin/*
           if-no-files-found: error
 

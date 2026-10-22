@@ -17,7 +17,12 @@ jobs:
         with:
           version: 0.16.0
 
-      - run: zig build -Doptimize=ReleaseFast -Dmulti-targets=true
+      - name: Build bash_ls
+        run: |
+          zig build \
+          -Doptimize=ReleaseFast \
+          -Dmulti-targets \
+          --summary all
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v7

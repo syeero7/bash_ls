@@ -33,9 +33,6 @@ pub fn initialize(
 ) !types.InitializeResult {
     if (params.capabilities.supportUtf8Encoding()) self.encoding = .@"utf-8";
 
-    // FIXME: support utf-16 position encoding
-    std.debug.assert(self.encoding == .@"utf-8");
-
     return .{
         .capabilities = .{
             .positionEncoding = self.encoding,
@@ -121,11 +118,8 @@ pub fn @"textDocument/didChange"(
 
     for (params.contentChanges) |change| {
         if (change.range) |range| {
-            const start_index = offsets.positionToIndex(buffer.items, range.start, self.encoding);
-            const relative_end = offsets.getRelativeEndPosition(range.start, range.end);
-            const end_index = offsets.positionToIndex(buffer.items[start_index..], relative_end, self.encoding);
-            const length = (start_index + end_index) - start_index;
-            try buffer.replaceRange(gpa, start_index, length, change.text);
+            const utf8_range = offsets.getUtf8Range(buffer.items, range, self.encoding);
+            try buffer.replaceRange(gpa, utf8_range.start_index, utf8_range.length, change.text);
             continue;
         }
 

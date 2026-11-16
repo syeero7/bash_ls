@@ -3,8 +3,8 @@
     .version = "0.1.0",
     .dependencies = .{
         .tree_sitter = .{
-            .url = "git+https://github.com/tree-sitter/zig-tree-sitter.git#b562510b5563dcf3b7fcac4a5fe9d60834c84667",
-            .hash = "tree_sitter-0.26.0-8heIf-vDAQDh0HhAAUVwVZFmLrwSKMZl5gRaVFqtas0W",
+            .url = "git+https://github.com/syeero7/zig-tree-sitter#701ac5f66de0d728c746aa1a4a01908a6c8d6ac2",
+            .hash = "tree_sitter-0.26.1-8heIf_fDAQDa4-TdSH18WqETZy-igz1Y8yr3hnjbabfg",
         },
         .tree_sitter_bash = .{
             .url = "git+https://github.com/tree-sitter/tree-sitter-bash.git#a06c2e4415e9bc0346c6b86d401879ffb44058f7",

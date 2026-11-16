@@ -67,16 +67,16 @@ pub fn start(
             .initialized => break :sw,
         }
 
-        inline for (@typeInfo(Handler).@"struct".decls) |func| {
-            if (comptime !isLspMethodFunc(func.name)) comptime continue;
-            if (std.mem.eql(u8, func.name, message.method)) {
-                const method_func = @field(Handler, func.name);
+        inline for (@typeInfo(Handler).@"struct".decl_names) |func_name| {
+            if (comptime !isLspMethodFunc(func_name)) comptime continue;
+            if (std.mem.eql(u8, func_name, message.method)) {
+                const method_func = @field(Handler, func_name);
                 const func_type = @typeInfo(@TypeOf(method_func));
                 comptime std.debug.assert(func_type == .@"fn");
-                const func_params = func_type.@"fn".params;
+                const func_params = func_type.@"fn".param_types;
                 comptime std.debug.assert(func_params.len == 4);
 
-                const Params = comptime func_params[3].type orelse unreachable;
+                const Params = comptime func_params[3] orelse unreachable;
                 var parsed_params: ?std.json.Parsed(Params) = null;
                 defer if (parsed_params) |params| params.deinit();
 
@@ -101,10 +101,10 @@ pub fn start(
                 };
 
                 const func_args = .{ handler, gpa, arena, params };
-                switch (comptime @typeInfo(MethodResultType(func.name))) {
+                switch (comptime @typeInfo(MethodResultType(func_name))) {
                     .void => @call(.auto, method_func, func_args),
                     .optional => {
-                        if (comptime !std.mem.eql(u8, func.name, "shutdown")) comptime unreachable;
+                        if (comptime !std.mem.eql(u8, func_name, "shutdown")) comptime unreachable;
                         _ = @call(.auto, method_func, func_args);
                         try jsonrpc.sendResultResponse(writer, arena, struct {}, .{
                             .id = message.id,
@@ -123,7 +123,7 @@ pub fn start(
 
                                 const result = @call(.auto, method_func, func_args) catch |err| {
                                     // TODO: could be any other err code
-                                    std.log.debug("method {s} failed. err: {any}\n", .{ func.name, err });
+                                    std.log.debug("method {s} failed. err: {any}\n", .{ func_name, err });
                                     try jsonrpc.sendErrorResponse(writer, arena, .{
                                         .id = message.id,
                                         .@"error" = .{
@@ -131,6 +131,7 @@ pub fn start(
                                             .message = @errorName(err),
                                         },
                                     });
+
                                     continue :server_loop;
                                 };
 
@@ -142,13 +143,13 @@ pub fn start(
 
                             .void => {
                                 @call(.auto, method_func, func_args) catch |err| {
-                                    if (comptime std.mem.eql(u8, func.name, "exit")) switch (err) {
+                                    if (comptime std.mem.eql(u8, func_name, "exit")) switch (err) {
                                         error.ExitServer => return,
                                         error.ExitWithoutShutdown => return err,
                                     };
 
                                     // TODO: could be any other err code
-                                    std.log.debug("method {s} failed. err: {any}\n", .{ func.name, err });
+                                    std.log.debug("method {s} failed. err: {any}\n", .{ func_name, err });
                                     try jsonrpc.sendErrorResponse(writer, arena, .{
                                         .id = message.id,
                                         .@"error" = .{

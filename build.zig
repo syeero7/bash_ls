@@ -40,16 +40,15 @@ pub fn build(b: *Build) !void {
 
     b.installArtifact(exe);
 
-    const run_exe_cmd = b.addRunArtifact(exe);
     const run_step = b.step("run", "Run the app");
-    run_step.dependOn(&run_exe_cmd.step);
-    run_exe_cmd.step.dependOn(b.getInstallStep());
-    if (b.args) |args| run_exe_cmd.addArgs(args);
+    const run_cmd = b.addRunArtifact(exe);
+    run_cmd.step.dependOn(b.getInstallStep());
+    run_step.dependOn(&run_cmd.step);
 
-    const tests = b.addTest(.{ .root_module = main_module });
-    const run_tests_cmd = b.addRunArtifact(tests);
     const test_step = b.step("test", "Run tests");
-    test_step.dependOn(&run_tests_cmd.step);
+    const tests = b.addTest(.{ .root_module = main_module });
+    const test_cmd = b.addRunArtifact(tests);
+    test_step.dependOn(&test_cmd.step);
 }
 
 fn getModule(b: *Build, target: ResolvedTarget, optimize: OptimizeMode) *Build.Module {

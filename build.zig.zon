@@ -1,6 +1,6 @@
 .{
     .name = .bash_ls,
-    .version = "0.1.0",
+    .version = "0.1.1",
     .dependencies = .{
         .tree_sitter = .{
             .url = "git+https://github.com/syeero7/zig-tree-sitter#701ac5f66de0d728c746aa1a4a01908a6c8d6ac2",

@@ -1,7 +1,7 @@
 const std = @import("std");
 const Build = std.Build;
 const ResolvedTarget = Build.ResolvedTarget;
-const OptimizeMode = std.builtin.OptimizeMode;
+const OptimizeMode = std.lang.OptimizeMode;
 
 const targets = [_]std.Target.Query{
     .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu },

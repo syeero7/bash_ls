@@ -62,7 +62,7 @@ const ErrorCode = enum(Integer) {
     initialize_error = 1,
 
     pub fn jsonStringify(self: @This(), stream: anytype) !void {
-        try stream.write(@intFromEnum(self));
+        try stream.write(@backingInt(self));
     }
 };
 
@@ -305,7 +305,7 @@ pub const TextDocumentSyncKind = enum(u8) {
     incremental = 2,
 
     pub fn jsonStringify(self: @This(), stream: anytype) !void {
-        try stream.write(@intFromEnum(self));
+        try stream.write(@backingInt(self));
     }
 };
 
@@ -445,7 +445,7 @@ pub const CompletionTriggerKind = enum(u8) {
     triggerForIncompleteCompletions = 3,
 
     pub fn jsonStringify(self: @This(), stream: anytype) !void {
-        try stream.write(@intFromEnum(self));
+        try stream.write(@backingInt(self));
     }
 };
 
@@ -462,6 +462,6 @@ pub const CompletionItemKind = enum(u8) {
     folder = 19,
 
     pub fn jsonStringify(self: @This(), stream: anytype) !void {
-        try stream.write(@intFromEnum(self));
+        try stream.write(@backingInt(self));
     }
 };

@@ -1,7 +1,7 @@
 const std = @import("std");
 const Build = std.Build;
 const ResolvedTarget = Build.ResolvedTarget;
-const OptimizeMode = std.lang.OptimizeMode;
+const Optimize = std.lang.Optimize;
 
 const targets = [_]std.Target.Query{
     .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu },
@@ -52,7 +52,7 @@ pub fn build(b: *Build) !void {
     test_step.dependOn(&test_cmd.step);
 }
 
-fn getModule(b: *Build, target: ResolvedTarget, optimize: OptimizeMode) *Build.Module {
+fn getModule(b: *Build, target: ResolvedTarget, optimize: Optimize) *Build.Module {
     const tree_sitter = b.dependency("tree_sitter", .{
         .target = target,
         .optimize = optimize,

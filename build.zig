@@ -42,6 +42,7 @@ pub fn build(b: *Build) !void {
 
     const run_step = b.step("run", "Run the app");
     const run_cmd = b.addRunArtifact(exe);
+    run_cmd.addPassthruArgs();
     run_cmd.step.dependOn(b.getInstallStep());
     run_step.dependOn(&run_cmd.step);
 

@@ -50,7 +50,7 @@ pub fn encodeJsonRpc(arena: Allocator, json_struct: anytype, options: json.Strin
     const content = try json.Stringify.valueAlloc(arena, json_struct, options);
     std.log.debug("json string: {s}", .{content});
     const fmt = header_field_name ++ "{d}" ++ field_separator ++ "{s}";
-    return std.fmt.allocPrint(arena, fmt, .{ content.len, content });
+    return try arena.print(fmt, .{ content.len, content });
 }
 
 fn decodeJsonRpc(comptime T: type, reader: *std.Io.Reader, arena: Allocator) !json.Parsed(T) {

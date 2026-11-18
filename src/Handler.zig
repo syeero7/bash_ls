@@ -227,13 +227,13 @@ pub fn @"textDocument/hover"(
 
     if (self.commands) |commands| {
         if (commands.get(node_text)) |cmd_help| {
-            hover.contents.value = try std.fmt.allocPrint(arena, "```text\n{s}\n``` ", .{cmd_help});
+            hover.contents.value = try arena.print("```text\n{s}\n``` ", .{cmd_help});
             return hover;
         }
     }
 
     if (ts_bash.isFunctionForReal(current_node, document)) {
-        hover.contents.value = try std.fmt.allocPrint(arena, "```bash\n{s}\n```", .{
+        hover.contents.value = try arena.print("```bash\n{s}\n```", .{
             try ts_bash.getFunctionDefinitionText(arena, root_node, document, node_text) orelse return null,
         });
         return hover;
@@ -255,15 +255,12 @@ pub fn @"textDocument/hover"(
                 value_text = document[parent_range.start..parent_range.end];
             }
 
-            hover.contents.value = try std.fmt.allocPrint(arena, "```bash\n{s}\n```", .{value_text.?});
+            hover.contents.value = try arena.print("```bash\n{s}\n```", .{value_text.?});
             return hover;
         }
     }
 
-    hover.contents.value = try std.fmt.allocPrint(arena, "**{s}**\n```bash\n{s}\n```", .{
-        node_kind,
-        node_text,
-    });
+    hover.contents.value = try arena.print("**{s}**\n```bash\n{s}\n```", .{ node_kind, node_text });
     return hover;
 }
 
